@@ -1,10 +1,9 @@
 // src/pages/Dashboard.jsx
 // ─────────────────────────────────────────────────────────────
 // Cambios vs anterior:
-//  - useJsApiLoader movido aquí (único punto de carga del SDK)
-//    con libraries: ['places'] para Autocomplete
-//  - isLoaded pasado como prop a Map y DestinationInput
-//  - Validación Haversine (100 km) calculada aquí y pasada a RouteControls
+//  - Estado `matrix` agregado aquí para que esté disponible
+//    globalmente (el algoritmo genético lo necesitará después)
+//  - Se pasa `setMatrix` a RouteControls vía prop
 // ─────────────────────────────────────────────────────────────
 import { useState }        from 'react'
 import { useNavigate }     from 'react-router-dom'
@@ -15,9 +14,6 @@ import Map                 from '../components/Map'
 import RouteControls       from '../components/RouteControls'
 import { validateRadius }  from '../utils/haversine'
 
-// ⚠️ Debe estar FUERA del componente para que sea referencia estable.
-// Si se define dentro, React re-crea el array en cada render y
-// @react-google-maps/api lanza un warning / recarga el SDK.
 const GOOGLE_MAPS_LIBRARIES = ['places']
 
 const INITIAL_LOCATIONS = [
@@ -29,23 +25,26 @@ export default function Dashboard() {
   const { currentUser, logout } = useAuth()
   const navigate = useNavigate()
 
-  // ── Cargar SDK de Google Maps (una sola vez, con Places) ───
   const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
     libraries:        GOOGLE_MAPS_LIBRARIES,
   })
 
-  // ── Estado global ──────────────────────────────────────────
   const [locations,  setLocations]  = useState(INITIAL_LOCATIONS)
   const [routeMode,  setRouteMode]  = useState('closed')
+  const [matrix,     setMatrix]     = useState(null)   // ← NxN distance matrix
   const [logoutLoad, setLogoutLoad] = useState(false)
 
-  // ── Validación Haversine ───────────────────────────────────
   const radiusValidation = validateRadius(locations)
   const validLocations   = locations.filter(l => l.lat !== null && l.lng !== null)
   const canCalculate     = validLocations.length >= 2 && radiusValidation.valid
 
-  // ── Logout ─────────────────────────────────────────────────
+  // Limpiar matriz si el usuario modifica los destinos después de calcular
+  function handleSetLocations(updater) {
+    setMatrix(null)
+    setLocations(updater)
+  }
+
   async function handleLogout() {
     setLogoutLoad(true)
     const { error } = await logout()
@@ -61,7 +60,6 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-slate-50 font-sans">
 
-      {/* ── Top bar ── */}
       <header className="bg-white border-b border-slate-200 px-5 py-3 flex items-center justify-between sticky top-0 z-10">
         <div className="flex items-center gap-2.5">
           <svg width="20" height="20" viewBox="0 0 48 48" fill="none" aria-hidden="true">
@@ -76,7 +74,6 @@ export default function Dashboard() {
             Route Optimizer v1.0
           </span>
         </div>
-
         <div className="flex items-center gap-3">
           {photoURL ? (
             <img src={photoURL} alt="Avatar" className="w-7 h-7 rounded-full object-cover border border-slate-200"/>
@@ -96,13 +93,10 @@ export default function Dashboard() {
         </div>
       </header>
 
-      {/* ── Layout principal ── */}
       <main className="max-w-7xl mx-auto px-4 py-6">
         <div className="flex flex-col lg:flex-row gap-5">
 
-          {/* ── Panel izquierdo ── */}
           <aside className="w-full lg:w-80 flex-shrink-0">
-
             <div className="bg-white rounded-xl border border-slate-200 p-5 mb-4"
                  style={{ boxShadow: '0 2px 12px 0 rgba(30,58,138,0.06)' }}>
               <h2 className="text-sm font-semibold text-slate-800 mb-4 flex items-center gap-2">
@@ -115,7 +109,7 @@ export default function Dashboard() {
               </h2>
               <DestinationInput
                 locations={locations}
-                setLocations={setLocations}
+                setLocations={handleSetLocations}
                 isLoaded={isLoaded}
               />
             </div>
@@ -135,12 +129,12 @@ export default function Dashboard() {
                 locations={locations}
                 canCalculate={canCalculate}
                 radiusValidation={radiusValidation}
+                matrix={matrix}
+                setMatrix={setMatrix}
               />
             </div>
-
           </aside>
 
-          {/* ── Panel derecho: mapa ── */}
           <section className="flex-1 min-w-0">
             <div className="bg-white rounded-xl border border-slate-200 p-4"
                  style={{ boxShadow: '0 2px 12px 0 rgba(30,58,138,0.06)' }}>
