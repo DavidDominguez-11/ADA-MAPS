@@ -1,40 +1,49 @@
 // src/pages/Dashboard.jsx
 // ─────────────────────────────────────────────────────────────
-// Página principal protegida — Route Optimizer.
-// Orquesta: estado de destinos, mapa y controles de ruta.
+// Cambios vs anterior:
+//  - useJsApiLoader movido aquí (único punto de carga del SDK)
+//    con libraries: ['places'] para Autocomplete
+//  - isLoaded pasado como prop a Map y DestinationInput
+//  - Validación Haversine (100 km) calculada aquí y pasada a RouteControls
 // ─────────────────────────────────────────────────────────────
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useAuth }          from '../context/AuthContext'
-import DestinationInput     from '../components/DestinationInput'
-import Map                  from '../components/Map'
-import RouteControls        from '../components/RouteControls'
+import { useState }        from 'react'
+import { useNavigate }     from 'react-router-dom'
+import { useJsApiLoader }  from '@react-google-maps/api'
+import { useAuth }         from '../context/AuthContext'
+import DestinationInput    from '../components/DestinationInput'
+import Map                 from '../components/Map'
+import RouteControls       from '../components/RouteControls'
+import { validateRadius }  from '../utils/haversine'
 
-// ── Destinos iniciales hardcodeados (Guatemala City)
-// Una vez que se implemente geocoding, lat/lng vendrán del API.
+// ⚠️ Debe estar FUERA del componente para que sea referencia estable.
+// Si se define dentro, React re-crea el array en cada render y
+// @react-google-maps/api lanza un warning / recarga el SDK.
+const GOOGLE_MAPS_LIBRARIES = ['places']
+
 const INITIAL_LOCATIONS = [
-  {
-    id:      crypto.randomUUID(),
-    address: 'Plaza Central, Ciudad de Guatemala',
-    lat:     14.6407,
-    lng:     -90.5133,
-  },
-  {
-    id:      crypto.randomUUID(),
-    address: 'Aeropuerto La Aurora, Guatemala',
-    lat:     14.5833,
-    lng:     -90.5275,
-  },
+  { id: crypto.randomUUID(), address: '', lat: null, lng: null },
+  { id: crypto.randomUUID(), address: '', lat: null, lng: null },
 ]
 
 export default function Dashboard() {
   const { currentUser, logout } = useAuth()
   const navigate = useNavigate()
 
-  // ── Estado global de destinos ──────────────────────────────
+  // ── Cargar SDK de Google Maps (una sola vez, con Places) ───
+  const { isLoaded, loadError } = useJsApiLoader({
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
+    libraries:        GOOGLE_MAPS_LIBRARIES,
+  })
+
+  // ── Estado global ──────────────────────────────────────────
   const [locations,  setLocations]  = useState(INITIAL_LOCATIONS)
   const [routeMode,  setRouteMode]  = useState('closed')
   const [logoutLoad, setLogoutLoad] = useState(false)
+
+  // ── Validación Haversine ───────────────────────────────────
+  const radiusValidation = validateRadius(locations)
+  const validLocations   = locations.filter(l => l.lat !== null && l.lng !== null)
+  const canCalculate     = validLocations.length >= 2 && radiusValidation.valid
 
   // ── Logout ─────────────────────────────────────────────────
   async function handleLogout() {
@@ -89,13 +98,11 @@ export default function Dashboard() {
 
       {/* ── Layout principal ── */}
       <main className="max-w-7xl mx-auto px-4 py-6">
-
         <div className="flex flex-col lg:flex-row gap-5">
 
-          {/* ── Panel izquierdo: inputs + controles ── */}
+          {/* ── Panel izquierdo ── */}
           <aside className="w-full lg:w-80 flex-shrink-0">
 
-            {/* Card destinos */}
             <div className="bg-white rounded-xl border border-slate-200 p-5 mb-4"
                  style={{ boxShadow: '0 2px 12px 0 rgba(30,58,138,0.06)' }}>
               <h2 className="text-sm font-semibold text-slate-800 mb-4 flex items-center gap-2">
@@ -104,18 +111,15 @@ export default function Dashboard() {
                   <circle cx="12" cy="9" r="2.5"/>
                 </svg>
                 Destinos
-                <span className="ml-auto text-xs font-normal text-slate-400">
-                  {locations.length}/15
-                </span>
+                <span className="ml-auto text-xs font-normal text-slate-400">{locations.length}/15</span>
               </h2>
-
               <DestinationInput
                 locations={locations}
                 setLocations={setLocations}
+                isLoaded={isLoaded}
               />
             </div>
 
-            {/* Card controles */}
             <div className="bg-white rounded-xl border border-slate-200 p-5"
                  style={{ boxShadow: '0 2px 12px 0 rgba(30,58,138,0.06)' }}>
               <h2 className="text-sm font-semibold text-slate-800 mb-4 flex items-center gap-2">
@@ -125,11 +129,12 @@ export default function Dashboard() {
                 </svg>
                 Configuración
               </h2>
-
               <RouteControls
                 routeMode={routeMode}
                 setRouteMode={setRouteMode}
                 locations={locations}
+                canCalculate={canCalculate}
+                radiusValidation={radiusValidation}
               />
             </div>
 
@@ -149,11 +154,10 @@ export default function Dashboard() {
                   Vista de mapa
                 </h2>
                 <span className="text-xs text-slate-400">
-                  {locations.filter(l => l.lat !== null).length} marker{locations.filter(l => l.lat !== null).length !== 1 ? 's' : ''} activos
+                  {validLocations.length} marker{validLocations.length !== 1 ? 's' : ''} activos
                 </span>
               </div>
-
-              <Map locations={locations} />
+              <Map locations={locations} isLoaded={isLoaded} loadError={loadError} />
             </div>
           </section>
 
