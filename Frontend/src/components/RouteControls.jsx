@@ -1,7 +1,9 @@
 // src/components/RouteControls.jsx
 // ─────────────────────────────────────────────────────────────
-// Selector de modo de ruta (abierta / cerrada) y botón Calcular.
-// El botón por ahora solo hace console.log del estado.
+// Cambios vs anterior:
+//  - Recibe canCalculate y radiusValidation desde Dashboard
+//  - Botón deshabilitado si < 2 coords válidas o excede 100 km
+//  - Muestra error de radio / mensaje de coords faltantes
 // ─────────────────────────────────────────────────────────────
 
 const ROUTE_MODES = [
@@ -28,9 +30,13 @@ const ROUTE_MODES = [
   },
 ]
 
-export default function RouteControls({ routeMode, setRouteMode, locations }) {
+export default function RouteControls({ routeMode, setRouteMode, locations, canCalculate, radiusValidation }) {
+  const validCount   = locations.filter(l => l.lat !== null).length
+  const totalCount   = locations.length
+  const missingCoords = totalCount - validCount
+
   function handleCalculate() {
-    // 🚧 Próximo milestone: aquí irá el request al backend / algoritmo genético
+    // 🚧 Próximo milestone: request al backend / algoritmo genético
     console.log('──────────────────────────────')
     console.log('[RouteControls] Calcular ruta')
     console.log('Modo:', routeMode)
@@ -38,16 +44,60 @@ export default function RouteControls({ routeMode, setRouteMode, locations }) {
     console.log('──────────────────────────────')
   }
 
-  const hasValidLocations = locations.filter(l => l.lat !== null).length >= 2
+  // ── Mensaje de estado bajo el botón ───────────────────────
+  function StatusMessage() {
+    if (!radiusValidation.valid) {
+      return (
+        <div className="flex items-start gap-1.5 rounded-lg bg-red-50 border border-red-200 px-3 py-2.5 text-xs text-red-700">
+          <svg className="mt-0.5 shrink-0 w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4m0 4h.01"/>
+          </svg>
+          <span>
+            Los destinos deben estar dentro de un radio máximo de 100 km.
+            {radiusValidation.distanceKm && (
+              <> Distancia detectada: <strong>{radiusValidation.distanceKm} km</strong>.</>
+            )}
+          </span>
+        </div>
+      )
+    }
+
+    if (missingCoords > 0 && validCount > 0) {
+      return (
+        <p className="text-xs text-amber-600 text-center">
+          {missingCoords} destino{missingCoords > 1 ? 's' : ''} sin coordenadas válidas
+        </p>
+      )
+    }
+
+    if (validCount === 0) {
+      return (
+        <p className="text-xs text-slate-400 text-center">
+          Ingresa al menos 2 destinos para calcular
+        </p>
+      )
+    }
+
+    if (canCalculate) {
+      return (
+        <p className="text-xs text-green-600 text-center flex items-center justify-center gap-1">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <path d="M20 6L9 17l-5-5"/>
+          </svg>
+          {validCount} destinos válidos · listo para calcular
+        </p>
+      )
+    }
+
+    return null
+  }
 
   return (
     <div className="flex flex-col gap-4">
 
-      {/* Selector modo */}
+      {/* Selector de modo */}
       <div>
-        <p className="text-xs font-medium text-slate-500 mb-2 uppercase tracking-wide">
-          Tipo de ruta
-        </p>
+        <p className="text-xs font-medium text-slate-500 mb-2 uppercase tracking-wide">Tipo de ruta</p>
         <div className="grid grid-cols-2 gap-2">
           {ROUTE_MODES.map(mode => (
             <button
@@ -79,11 +129,13 @@ export default function RouteControls({ routeMode, setRouteMode, locations }) {
       <button
         type="button"
         onClick={handleCalculate}
+        disabled={!canCalculate}
         className="
-          w-full rounded-xl bg-[#1D4ED8] py-3 text-sm font-semibold text-white
-          tracking-wide transition-all duration-150
-          hover:bg-[#1e3a8a] active:scale-[.98]
+          w-full rounded-xl py-3 text-sm font-semibold tracking-wide
           flex items-center justify-center gap-2
+          transition-all duration-150 active:scale-[.98]
+          bg-[#1D4ED8] text-white hover:bg-[#1e3a8a]
+          disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#1D4ED8]
         "
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -92,13 +144,8 @@ export default function RouteControls({ routeMode, setRouteMode, locations }) {
         Calcular ruta óptima
       </button>
 
-      {/* Info destinos activos */}
-      <p className="text-xs text-center text-slate-400">
-        {locations.length} destino{locations.length !== 1 ? 's' : ''} ingresados
-        {hasValidLocations
-          ? ` · ${locations.filter(l => l.lat !== null).length} con coordenadas`
-          : ' · sin coordenadas aún'}
-      </p>
+      {/* Mensaje de estado */}
+      <StatusMessage />
 
     </div>
   )
