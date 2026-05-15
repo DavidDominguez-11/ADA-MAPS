@@ -1,12 +1,13 @@
 // src/components/RouteControls.jsx
 // ─────────────────────────────────────────────────────────────
 // Cambios vs anterior:
-//  - handleCalculate ahora llama a optimizeRoute() del servicio
-//  - Estado local: loading + apiError para feedback de UI
-//  - console.log del response para verificar flujo completo
+//  - Consume el nuevo response shape: { success, matrix }
+//  - Guarda la matriz en el estado global (via setMatrix prop)
+//  - MatrixPreview: tabla visual de la matriz NxN recibida
+//  - console.log(data.matrix) para verificar flujo
 // ─────────────────────────────────────────────────────────────
-import { useState }        from 'react'
-import { optimizeRoute }   from '../services/api'
+import { useState }      from 'react'
+import { optimizeRoute } from '../services/api'
 
 const ROUTE_MODES = [
   {
@@ -32,7 +33,64 @@ const ROUTE_MODES = [
   },
 ]
 
-export default function RouteControls({ routeMode, setRouteMode, locations, canCalculate, radiusValidation }) {
+// ── Tabla visual de la matriz NxN ─────────────────────────────
+function MatrixPreview({ matrix, locations }) {
+  if (!matrix) return null
+
+  const n = matrix.length
+
+  return (
+    <div className="rounded-xl border border-blue-100 bg-blue-50 p-3">
+      <p className="text-xs font-semibold text-blue-700 mb-2 flex items-center gap-1.5">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+          <path d="M20 6L9 17l-5-5"/>
+        </svg>
+        Matriz de distancias recibida ({n}×{n})
+      </p>
+      <div className="overflow-x-auto">
+        <table className="text-xs w-full border-collapse">
+          <thead>
+            <tr>
+              <th className="w-6"/>
+              {locations.filter(l => l.lat !== null).map((_, i) => (
+                <th key={i} className="px-1.5 py-1 text-center font-bold text-blue-600">
+                  {i + 1}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {matrix.map((row, i) => (
+              <tr key={i}>
+                <td className="px-1.5 py-1 font-bold text-blue-600 text-center">{i + 1}</td>
+                {row.map((val, j) => (
+                  <td
+                    key={j}
+                    className={`
+                      px-1.5 py-1 text-center rounded tabular-nums
+                      ${i === j
+                        ? 'text-slate-300 font-normal'
+                        : 'text-slate-700 font-medium'
+                      }
+                    `}
+                  >
+                    {i === j ? '—' : val >= 1000
+                      ? `${(val / 1000).toFixed(1)}k`
+                      : val
+                    }
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-xs text-blue-400 mt-1.5">valores en metros · asimétrica por tráfico</p>
+    </div>
+  )
+}
+
+export default function RouteControls({ routeMode, setRouteMode, locations, canCalculate, radiusValidation, matrix, setMatrix }) {
   const [loading,  setLoading]  = useState(false)
   const [apiError, setApiError] = useState(null)
 
@@ -40,10 +98,10 @@ export default function RouteControls({ routeMode, setRouteMode, locations, canC
   const totalCount    = locations.length
   const missingCoords = totalCount - validCount
 
-  // ── Calcular: POST /optimize ───────────────────────────────
   async function handleCalculate() {
     if (!canCalculate) return
     setApiError(null)
+    setMatrix(null)
     setLoading(true)
 
     const { data, error } = await optimizeRoute({
@@ -58,14 +116,21 @@ export default function RouteControls({ routeMode, setRouteMode, locations, canC
       return
     }
 
-    // 🚧 Próximo milestone: renderizar polylines con data.route
+    // Verificar shape del response
+    if (!data?.success || !Array.isArray(data?.matrix)) {
+      setApiError('El backend devolvió una respuesta inesperada.')
+      console.warn('[RouteControls] Response inesperado:', data)
+      return
+    }
+
+    // ✅ Matriz recibida correctamente
+    setMatrix(data.matrix)
     console.log('──────────────────────────────')
-    console.log('[RouteControls] Response del backend:')
-    console.log(data)
+    console.log('[RouteControls] Matriz de distancias recibida:')
+    console.log(data.matrix)
     console.log('──────────────────────────────')
   }
 
-  // ── Mensajes de estado ─────────────────────────────────────
   function StatusMessage() {
     if (apiError) {
       return (
@@ -77,7 +142,6 @@ export default function RouteControls({ routeMode, setRouteMode, locations, canC
         </div>
       )
     }
-
     if (!radiusValidation.valid) {
       return (
         <div className="flex items-start gap-1.5 rounded-lg bg-red-50 border border-red-200 px-3 py-2.5 text-xs text-red-700">
@@ -86,27 +150,18 @@ export default function RouteControls({ routeMode, setRouteMode, locations, canC
           </svg>
           <span>
             Los destinos deben estar dentro de un radio máximo de 100 km.
-            {radiusValidation.distanceKm && (
-              <> Detectado: <strong>{radiusValidation.distanceKm} km</strong>.</>
-            )}
+            {radiusValidation.distanceKm && <> Detectado: <strong>{radiusValidation.distanceKm} km</strong>.</>}
           </span>
         </div>
       )
     }
-
     if (missingCoords > 0 && validCount > 0) {
-      return (
-        <p className="text-xs text-amber-600 text-center">
-          {missingCoords} destino{missingCoords > 1 ? 's' : ''} sin coordenadas válidas
-        </p>
-      )
+      return <p className="text-xs text-amber-600 text-center">{missingCoords} destino{missingCoords > 1 ? 's' : ''} sin coordenadas válidas</p>
     }
-
     if (validCount === 0) {
       return <p className="text-xs text-slate-400 text-center">Ingresa al menos 2 destinos para calcular</p>
     }
-
-    if (canCalculate) {
+    if (canCalculate && !matrix) {
       return (
         <p className="text-xs text-green-600 text-center flex items-center justify-center gap-1">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
@@ -116,7 +171,6 @@ export default function RouteControls({ routeMode, setRouteMode, locations, canC
         </p>
       )
     }
-
     return null
   }
 
@@ -131,7 +185,7 @@ export default function RouteControls({ routeMode, setRouteMode, locations, canC
             <button
               key={mode.value}
               type="button"
-              onClick={() => { setRouteMode(mode.value); setApiError(null) }}
+              onClick={() => { setRouteMode(mode.value); setApiError(null); setMatrix(null) }}
               className={`
                 flex items-center gap-2.5 rounded-xl border px-3 py-3
                 text-left transition-all duration-150
@@ -185,6 +239,12 @@ export default function RouteControls({ routeMode, setRouteMode, locations, canC
       </button>
 
       <StatusMessage />
+
+      {/* Tabla de la matriz cuando ya está disponible */}
+      <MatrixPreview
+        matrix={matrix}
+        locations={locations}
+      />
 
     </div>
   )
