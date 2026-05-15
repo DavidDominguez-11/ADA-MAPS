@@ -1,10 +1,12 @@
 // src/components/RouteControls.jsx
 // ─────────────────────────────────────────────────────────────
 // Cambios vs anterior:
-//  - Recibe canCalculate y radiusValidation desde Dashboard
-//  - Botón deshabilitado si < 2 coords válidas o excede 100 km
-//  - Muestra error de radio / mensaje de coords faltantes
+//  - handleCalculate ahora llama a optimizeRoute() del servicio
+//  - Estado local: loading + apiError para feedback de UI
+//  - console.log del response para verificar flujo completo
 // ─────────────────────────────────────────────────────────────
+import { useState }        from 'react'
+import { optimizeRoute }   from '../services/api'
 
 const ROUTE_MODES = [
   {
@@ -31,21 +33,51 @@ const ROUTE_MODES = [
 ]
 
 export default function RouteControls({ routeMode, setRouteMode, locations, canCalculate, radiusValidation }) {
-  const validCount   = locations.filter(l => l.lat !== null).length
-  const totalCount   = locations.length
+  const [loading,  setLoading]  = useState(false)
+  const [apiError, setApiError] = useState(null)
+
+  const validCount    = locations.filter(l => l.lat !== null).length
+  const totalCount    = locations.length
   const missingCoords = totalCount - validCount
 
-  function handleCalculate() {
-    // 🚧 Próximo milestone: request al backend / algoritmo genético
+  // ── Calcular: POST /optimize ───────────────────────────────
+  async function handleCalculate() {
+    if (!canCalculate) return
+    setApiError(null)
+    setLoading(true)
+
+    const { data, error } = await optimizeRoute({
+      locations: locations.filter(l => l.lat !== null && l.lng !== null),
+      mode:      routeMode,
+    })
+
+    setLoading(false)
+
+    if (error) {
+      setApiError(error)
+      return
+    }
+
+    // 🚧 Próximo milestone: renderizar polylines con data.route
     console.log('──────────────────────────────')
-    console.log('[RouteControls] Calcular ruta')
-    console.log('Modo:', routeMode)
-    console.log('Destinos:', locations)
+    console.log('[RouteControls] Response del backend:')
+    console.log(data)
     console.log('──────────────────────────────')
   }
 
-  // ── Mensaje de estado bajo el botón ───────────────────────
+  // ── Mensajes de estado ─────────────────────────────────────
   function StatusMessage() {
+    if (apiError) {
+      return (
+        <div className="flex items-start gap-1.5 rounded-lg bg-red-50 border border-red-200 px-3 py-2.5 text-xs text-red-700">
+          <svg className="mt-0.5 shrink-0 w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4m0 4h.01"/>
+          </svg>
+          <span>{apiError}</span>
+        </div>
+      )
+    }
+
     if (!radiusValidation.valid) {
       return (
         <div className="flex items-start gap-1.5 rounded-lg bg-red-50 border border-red-200 px-3 py-2.5 text-xs text-red-700">
@@ -55,7 +87,7 @@ export default function RouteControls({ routeMode, setRouteMode, locations, canC
           <span>
             Los destinos deben estar dentro de un radio máximo de 100 km.
             {radiusValidation.distanceKm && (
-              <> Distancia detectada: <strong>{radiusValidation.distanceKm} km</strong>.</>
+              <> Detectado: <strong>{radiusValidation.distanceKm} km</strong>.</>
             )}
           </span>
         </div>
@@ -71,11 +103,7 @@ export default function RouteControls({ routeMode, setRouteMode, locations, canC
     }
 
     if (validCount === 0) {
-      return (
-        <p className="text-xs text-slate-400 text-center">
-          Ingresa al menos 2 destinos para calcular
-        </p>
-      )
+      return <p className="text-xs text-slate-400 text-center">Ingresa al menos 2 destinos para calcular</p>
     }
 
     if (canCalculate) {
@@ -103,7 +131,7 @@ export default function RouteControls({ routeMode, setRouteMode, locations, canC
             <button
               key={mode.value}
               type="button"
-              onClick={() => setRouteMode(mode.value)}
+              onClick={() => { setRouteMode(mode.value); setApiError(null) }}
               className={`
                 flex items-center gap-2.5 rounded-xl border px-3 py-3
                 text-left transition-all duration-150
@@ -129,7 +157,7 @@ export default function RouteControls({ routeMode, setRouteMode, locations, canC
       <button
         type="button"
         onClick={handleCalculate}
-        disabled={!canCalculate}
+        disabled={!canCalculate || loading}
         className="
           w-full rounded-xl py-3 text-sm font-semibold tracking-wide
           flex items-center justify-center gap-2
@@ -138,13 +166,24 @@ export default function RouteControls({ routeMode, setRouteMode, locations, canC
           disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-[#1D4ED8]
         "
       >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M9 20l-5.447-2.724A1 1 0 0 1 3 16.382V5.618a1 1 0 0 1 1.447-.894L9 7m0 13l6-3m-6-10l6 3m0 10l5.447-2.724A1 1 0 0 0 21 16.382V5.618a1 1 0 0 0-1.447-.894L15 7m0 13V7"/>
-        </svg>
-        Calcular ruta óptima
+        {loading ? (
+          <>
+            <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+            </svg>
+            Calculando…
+          </>
+        ) : (
+          <>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 20l-5.447-2.724A1 1 0 0 1 3 16.382V5.618a1 1 0 0 1 1.447-.894L9 7m0 13l6-3m-6-10l6 3m0 10l5.447-2.724A1 1 0 0 0 21 16.382V5.618a1 1 0 0 0-1.447-.894L15 7m0 13V7"/>
+            </svg>
+            Calcular ruta óptima
+          </>
+        )}
       </button>
 
-      {/* Mensaje de estado */}
       <StatusMessage />
 
     </div>
