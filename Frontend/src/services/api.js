@@ -1,21 +1,44 @@
 // src/services/api.js
 // ─────────────────────────────────────────────────────────────
-// Capa de servicio: centraliza todos los requests HTTP al backend.
-// URL base leída desde .env → VITE_API_URL
-//
-// Contrato con el backend (openapi.json):
-//   POST /optimize
-//   Body: { locations: Location[], mode: "open" | "closed" }
-//   Location: { id, address, lat, lng }
+// Cambios vs anterior:
+//  - Retorna `errorType` junto a `error` para que el frontend
+//    pueda mostrar mensajes distintos por categoría de fallo
 // ─────────────────────────────────────────────────────────────
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
+
+// Categorías de error que el frontend puede distinguir visualmente
+// 'network'      → backend caído / sin conexión
+// 'validation'   → payload inválido (422 Pydantic)
+// 'google_api'   → fallo en Distance Matrix / Places API
+// 'optimization' → error interno del algoritmo
+// 'unknown'      → cualquier otro 4xx / 5xx
+const ERROR_TYPES = {
+  NETWORK:      'network',
+  VALIDATION:   'validation',
+  GOOGLE_API:   'google_api',
+  OPTIMIZATION: 'optimization',
+  UNKNOWN:      'unknown',
+}
+
+/**
+ * Clasifica el tipo de error según el status HTTP y el cuerpo del response.
+ */
+function classifyError(status, body) {
+  if (status === 422)                         return ERROR_TYPES.VALIDATION
+  if (status === 503 || status === 502)       return ERROR_TYPES.GOOGLE_API
+  if (body?.detail?.includes?.('google'))     return ERROR_TYPES.GOOGLE_API
+  if (body?.detail?.includes?.('matrix'))     return ERROR_TYPES.GOOGLE_API
+  if (body?.detail?.includes?.('optim'))      return ERROR_TYPES.OPTIMIZATION
+  if (status >= 500)                          return ERROR_TYPES.OPTIMIZATION
+  return ERROR_TYPES.UNKNOWN
+}
 
 /**
  * Envía el payload de optimización al backend.
  *
  * @param {{ locations: Location[], mode: "open"|"closed" }} payload
- * @returns {Promise<{ data: any|null, error: string|null }>}
+ * @returns {Promise<{ data: any|null, error: string|null, errorType: string|null }>}
  */
 export async function optimizeRoute(payload) {
   try {
@@ -25,24 +48,23 @@ export async function optimizeRoute(payload) {
       body:    JSON.stringify(payload),
     })
 
-    // Error HTTP (422 Pydantic, 500, etc.)
+    const body = await response.json().catch(() => null)
+
     if (!response.ok) {
-      const body = await response.json().catch(() => null)
-      const detail = body?.detail?.[0]?.msg ?? `Error ${response.status}`
-      return { data: null, error: detail }
+      const detail    = body?.detail?.[0]?.msg ?? body?.detail ?? `Error ${response.status}`
+      const errorType = classifyError(response.status, body)
+      return { data: null, error: String(detail), errorType }
     }
 
-    const data = await response.json()
-    return { data, error: null }
+    return { data: body, error: null, errorType: null }
 
   } catch (err) {
-    // Error de red (backend caído, CORS, etc.)
-    const isNetwork = err instanceof TypeError
     return {
-      data:  null,
-      error: isNetwork
-        ? 'No se pudo conectar con el servidor. Verifica que el backend esté corriendo.'
-        : err.message,
+      data:      null,
+      error:     err instanceof TypeError
+                   ? 'No se pudo conectar con el servidor. Verifica que el backend esté corriendo.'
+                   : err.message,
+      errorType: ERROR_TYPES.NETWORK,
     }
   }
 }
