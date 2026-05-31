@@ -1,15 +1,16 @@
 // src/components/Map.jsx
 // ─────────────────────────────────────────────────────────────
 // Cambios vs anterior:
-//  - Ya NO tiene su propio useJsApiLoader (lo recibe como prop)
-//  - fitBounds() automático cuando cambian las locations
-//  - useCallback en onLoad para guardar la instancia del mapa
+//  - Recibe prop `route` (array de índices del algoritmo)
+//  - Cuando route existe: reordena markers según esos índices
+//  - Números de los markers reflejan el orden optimizado (1, 2, 3…)
+//  - Sin route: comportamiento original (orden de entrada)
 // ─────────────────────────────────────────────────────────────
-import { useRef, useEffect, useCallback } from 'react'
+import { useRef, useEffect, useCallback, useMemo } from 'react'
 import { GoogleMap, Marker } from '@react-google-maps/api'
 
-const DEFAULT_CENTER = { lat: 14.6349, lng: -90.5069 } // Guatemala City
-const DEFAULT_ZOOM   = 12
+const DEFAULT_CENTER  = { lat: 14.6349, lng: -90.5069 }
+const DEFAULT_ZOOM    = 12
 const CONTAINER_STYLE = { width: '100%', height: '480px', borderRadius: '12px' }
 
 const MAP_OPTIONS = {
@@ -28,35 +29,43 @@ const MAP_OPTIONS = {
   ],
 }
 
-export default function Map({ locations, isLoaded, loadError }) {
+export default function Map({ locations, isLoaded, loadError, route }) {
   const mapRef = useRef(null)
 
-  // Guardar instancia del mapa al montar
-  const handleMapLoad = useCallback((map) => {
-    mapRef.current = map
-  }, [])
+  const handleMapLoad = useCallback((map) => { mapRef.current = map }, [])
 
-  // Locations con coordenadas válidas
-  const activeMarkers = locations.filter(l => l.lat !== null && l.lng !== null)
+  // ── Locations con coordenadas válidas (fuente de verdad) ───
+  const validLocs = useMemo(
+    () => locations.filter(l => l.lat !== null && l.lng !== null),
+    [locations]
+  )
 
-  // ── fitBounds: se ejecuta cada vez que cambian los markers ──
+  // ── Markers a renderizar ───────────────────────────────────
+  // Con route: reordenar según los índices del algoritmo.
+  // Sin route: orden original.
+  const orderedMarkers = useMemo(() => {
+    if (!route || route.length === 0) return validLocs
+
+    return route
+      .filter(idx => idx >= 0 && idx < validLocs.length)
+      .map(idx => validLocs[idx])
+  }, [route, validLocs])
+
+  // ── fitBounds cuando cambian los markers ───────────────────
   useEffect(() => {
-    if (!mapRef.current || activeMarkers.length === 0) return
+    if (!mapRef.current || orderedMarkers.length === 0) return
 
-    if (activeMarkers.length === 1) {
-      // Un solo punto: centrar y zoom fijo
-      mapRef.current.panTo({ lat: activeMarkers[0].lat, lng: activeMarkers[0].lng })
+    if (orderedMarkers.length === 1) {
+      mapRef.current.panTo({ lat: orderedMarkers[0].lat, lng: orderedMarkers[0].lng })
       mapRef.current.setZoom(14)
       return
     }
 
-    // Varios puntos: ajustar bounds para mostrarlos todos
     const bounds = new window.google.maps.LatLngBounds()
-    activeMarkers.forEach(loc => bounds.extend({ lat: loc.lat, lng: loc.lng }))
-    mapRef.current.fitBounds(bounds, { padding: 80 }) // 80px de margen
-  }, [activeMarkers])
+    orderedMarkers.forEach(loc => bounds.extend({ lat: loc.lat, lng: loc.lng }))
+    mapRef.current.fitBounds(bounds, { padding: 80 })
+  }, [orderedMarkers])
 
-  // ── Error de carga ─────────────────────────────────────────
   if (loadError) {
     return (
       <div className="flex flex-col items-center justify-center rounded-xl bg-red-50 border border-red-200 text-red-600" style={{ height: '480px' }}>
@@ -69,7 +78,6 @@ export default function Map({ locations, isLoaded, loadError }) {
     )
   }
 
-  // ── SDK cargando ───────────────────────────────────────────
   if (!isLoaded) {
     return (
       <div className="flex flex-col items-center justify-center rounded-xl bg-slate-100 border border-slate-200" style={{ height: '480px' }}>
@@ -85,22 +93,31 @@ export default function Map({ locations, isLoaded, loadError }) {
   return (
     <GoogleMap
       mapContainerStyle={CONTAINER_STYLE}
-      center={activeMarkers.length === 0 ? DEFAULT_CENTER : undefined}
-      zoom={activeMarkers.length === 0 ? DEFAULT_ZOOM : undefined}
+      center={orderedMarkers.length === 0 ? DEFAULT_CENTER : undefined}
+      zoom={orderedMarkers.length === 0 ? DEFAULT_ZOOM : undefined}
       options={MAP_OPTIONS}
       onLoad={handleMapLoad}
     >
-      {activeMarkers.map((loc, index) => (
+      {orderedMarkers.map((loc, step) => (
         <Marker
-          key={loc.id}
+          key={`${loc.id}-${step}`}
           position={{ lat: loc.lat, lng: loc.lng }}
           label={{
-            text:       String(index + 1),
+            text:       String(step + 1),
             color:      '#ffffff',
             fontWeight: 'bold',
             fontSize:   '13px',
           }}
-          title={loc.address || `Destino ${index + 1}`}
+          // Primer marker en azul oscuro si ya hay ruta optimizada
+          icon={route && step === 0 ? {
+            path:        window.google.maps.SymbolPath.CIRCLE,
+            scale:       14,
+            fillColor:   '#1E3A8A',
+            fillOpacity: 1,
+            strokeColor: '#ffffff',
+            strokeWeight: 2,
+          } : undefined}
+          title={`${step + 1}. ${loc.address}`}
         />
       ))}
     </GoogleMap>
