@@ -161,7 +161,7 @@ export default function Dashboard() {
                 </span>
               </div>
               {/* route: cuando existe, el mapa reordena los markers según los índices */}
-              <Map locations={locations} isLoaded={isLoaded} loadError={loadError} route={route} />
+              <Map locations={locations} isLoaded={isLoaded} loadError={loadError} route={route} routeMode={routeMode} />
             </div>
           </section>
 
