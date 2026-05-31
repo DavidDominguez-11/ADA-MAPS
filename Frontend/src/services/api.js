@@ -1,51 +1,50 @@
 // src/services/api.js
 // ─────────────────────────────────────────────────────────────
 // Cambios vs anterior:
-//  - Retorna `errorType` junto a `error` para que el frontend
-//    pueda mostrar mensajes distintos por categoría de fallo
+//  - optimizeRoute recibe `token` (Firebase ID token)
+//  - Header Authorization: Bearer <token> en cada request
+//  - 401 → errorType 'auth' → el caller hace logout
+//  - URL de producción: solo cambiar VITE_API_URL en .env
 // ─────────────────────────────────────────────────────────────
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://127.0.0.1:8000'
 
-// Categorías de error que el frontend puede distinguir visualmente
-// 'network'      → backend caído / sin conexión
-// 'validation'   → payload inválido (422 Pydantic)
-// 'google_api'   → fallo en Distance Matrix / Places API
-// 'optimization' → error interno del algoritmo
-// 'unknown'      → cualquier otro 4xx / 5xx
 const ERROR_TYPES = {
   NETWORK:      'network',
-  VALIDATION:   'validation',
-  GOOGLE_API:   'google_api',
-  OPTIMIZATION: 'optimization',
+  AUTH:         'auth',           // 401 — token inválido / expirado
+  VALIDATION:   'validation',     // 422 — payload inválido
+  GOOGLE_API:   'google_api',     // 502/503 o fallo en Distance Matrix
+  OPTIMIZATION: 'optimization',   // 500 — error del algoritmo
   UNKNOWN:      'unknown',
 }
 
-/**
- * Clasifica el tipo de error según el status HTTP y el cuerpo del response.
- */
 function classifyError(status, body) {
-  if (status === 422)                         return ERROR_TYPES.VALIDATION
-  if (status === 503 || status === 502)       return ERROR_TYPES.GOOGLE_API
-  if (body?.detail?.includes?.('google'))     return ERROR_TYPES.GOOGLE_API
-  if (body?.detail?.includes?.('matrix'))     return ERROR_TYPES.GOOGLE_API
-  if (body?.detail?.includes?.('optim'))      return ERROR_TYPES.OPTIMIZATION
-  if (status >= 500)                          return ERROR_TYPES.OPTIMIZATION
+  if (status === 401)                             return ERROR_TYPES.AUTH
+  if (status === 422)                             return ERROR_TYPES.VALIDATION
+  if (status === 503 || status === 502)           return ERROR_TYPES.GOOGLE_API
+  if (body?.detail?.includes?.('google'))         return ERROR_TYPES.GOOGLE_API
+  if (body?.detail?.includes?.('matrix'))         return ERROR_TYPES.GOOGLE_API
+  if (body?.detail?.includes?.('optim'))          return ERROR_TYPES.OPTIMIZATION
+  if (status >= 500)                              return ERROR_TYPES.OPTIMIZATION
   return ERROR_TYPES.UNKNOWN
 }
 
 /**
- * Envía el payload de optimización al backend.
+ * POST /optimize
  *
  * @param {{ locations: Location[], mode: "open"|"closed" }} payload
+ * @param {string} token  Firebase ID token — adjuntado como Bearer
  * @returns {Promise<{ data: any|null, error: string|null, errorType: string|null }>}
  */
-export async function optimizeRoute(payload) {
+export async function optimizeRoute(payload, token) {
   try {
     const response = await fetch(`${API_URL}/optimize`, {
       method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify(payload),
+      headers: {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
     })
 
     const body = await response.json().catch(() => null)
