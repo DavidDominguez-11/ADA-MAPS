@@ -1,9 +1,9 @@
 // src/pages/Dashboard.jsx
 // ─────────────────────────────────────────────────────────────
 // Cambios vs anterior:
-//  - Estado `matrix` agregado aquí para que esté disponible
-//    globalmente (el algoritmo genético lo necesitará después)
-//  - Se pasa `setMatrix` a RouteControls vía prop
+//  - Estado `route` (índices ordenados) y `distance` (metros totales)
+//  - handleSetLocations limpia también route y distance
+//  - route y distance pasados a RouteControls y Map
 // ─────────────────────────────────────────────────────────────
 import { useState }        from 'react'
 import { useNavigate }     from 'react-router-dom'
@@ -30,18 +30,25 @@ export default function Dashboard() {
     libraries:        GOOGLE_MAPS_LIBRARIES,
   })
 
-  const [locations,  setLocations]  = useState(INITIAL_LOCATIONS)
-  const [routeMode,  setRouteMode]  = useState('closed')
-  const [matrix,     setMatrix]     = useState(null)   // ← NxN distance matrix
+  const [locations, setLocations] = useState(INITIAL_LOCATIONS)
+  const [routeMode, setRouteMode] = useState('closed')
+
+  // ── Resultado del algoritmo genético ──────────────────────
+  const [matrix,   setMatrix]   = useState(null)  // NxN · metros
+  const [route,    setRoute]    = useState(null)  // [0, 2, 1, ...] índices optimizados
+  const [distance, setDistance] = useState(null)  // metros totales del recorrido
+
   const [logoutLoad, setLogoutLoad] = useState(false)
 
   const radiusValidation = validateRadius(locations)
   const validLocations   = locations.filter(l => l.lat !== null && l.lng !== null)
   const canCalculate     = validLocations.length >= 2 && radiusValidation.valid
 
-  // Limpiar matriz si el usuario modifica los destinos después de calcular
+  // Limpiar todo el resultado si el usuario toca los destinos
   function handleSetLocations(updater) {
     setMatrix(null)
+    setRoute(null)
+    setDistance(null)
     setLocations(updater)
   }
 
@@ -129,8 +136,9 @@ export default function Dashboard() {
                 locations={locations}
                 canCalculate={canCalculate}
                 radiusValidation={radiusValidation}
-                matrix={matrix}
-                setMatrix={setMatrix}
+                matrix={matrix}   setMatrix={setMatrix}
+                route={route}     setRoute={setRoute}
+                distance={distance} setDistance={setDistance}
               />
             </div>
           </aside>
@@ -149,9 +157,11 @@ export default function Dashboard() {
                 </h2>
                 <span className="text-xs text-slate-400">
                   {validLocations.length} marker{validLocations.length !== 1 ? 's' : ''} activos
+                  {route && <span className="ml-2 text-blue-500 font-medium">· ruta optimizada</span>}
                 </span>
               </div>
-              <Map locations={locations} isLoaded={isLoaded} loadError={loadError} />
+              {/* route: cuando existe, el mapa reordena los markers según los índices */}
+              <Map locations={locations} isLoaded={isLoaded} loadError={loadError} route={route} />
             </div>
           </section>
 
