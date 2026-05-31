@@ -1,0 +1,10 @@
+# Google Cloud Functions usa este archivo, no pyproject.toml
+# Mantener sincronizado con pyproject.toml
+
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+python-dotenv>=1.0.0
+requests>=2.32.0
+pydantic>=2.0.0
+firebase-admin>=6.0.0
+functions-framework>=3.0.0
