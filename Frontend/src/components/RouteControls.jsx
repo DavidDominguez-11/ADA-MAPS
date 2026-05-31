@@ -1,11 +1,13 @@
 // src/components/RouteControls.jsx
 // ─────────────────────────────────────────────────────────────
 // Cambios vs anterior:
-//  - RouteResult: nombres completos de dirección (no solo índices)
-//  - execution_time_ms → badge "Calculado en X ms"
-//  - ErrorBanner: distingue network / validation / google_api / optimization
+//  - useAuth() para obtener Firebase ID token antes de cada request
+//  - Token enviado como Authorization: Bearer <token>
+//  - 401 → logout automático + redirect a /login
 // ─────────────────────────────────────────────────────────────
 import { useState }      from 'react'
+import { useNavigate }   from 'react-router-dom'
+import { useAuth }       from '../context/AuthContext'
 import { optimizeRoute } from '../services/api'
 
 const ROUTE_MODES = [
@@ -34,6 +36,17 @@ const ROUTE_MODES = [
 
 // ── Mensajes y colores por tipo de error ─────────────────────
 const ERROR_META = {
+  auth: {
+    label: 'Sesión expirada',
+    hint:  'Tu sesión ya no es válida. Serás redirigido al login automáticamente.',
+    color: 'text-orange-700 bg-orange-50 border-orange-200',
+    icon: (
+      <svg className="w-3.5 h-3.5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+      </svg>
+    ),
+  },
   network: {
     label: 'Sin conexión',
     hint:  'El servidor no responde. Verifica que el backend esté corriendo.',
@@ -240,6 +253,9 @@ export default function RouteControls({
   route,    setRoute,
   distance, setDistance,
 }) {
+  const { currentUser, logout } = useAuth()
+  const navigate = useNavigate()
+
   const [loading,     setLoading]     = useState(false)
   const [apiError,    setApiError]    = useState(null)
   const [errorType,   setErrorType]   = useState(null)
@@ -258,16 +274,37 @@ export default function RouteControls({
     resetResult()
     setLoading(true)
 
-    const { data, error, errorType: eType } = await optimizeRoute({
-      locations: locations.filter(l => l.lat !== null && l.lng !== null),
-      mode:      routeMode,
-    })
+    // Obtener Firebase ID token fresco en cada request
+    let token
+    try {
+      token = await currentUser.getIdToken()
+    } catch {
+      setApiError('No se pudo obtener el token de sesión. Intenta iniciar sesión de nuevo.')
+      setErrorType('auth')
+      setLoading(false)
+      return
+    }
+
+    const { data, error, errorType: eType } = await optimizeRoute(
+      {
+        locations: locations.filter(l => l.lat !== null && l.lng !== null),
+        mode:      routeMode,
+      },
+      token
+    )
 
     setLoading(false)
 
     if (error) {
       setApiError(error)
       setErrorType(eType)
+
+      // 401 → sesión expirada: hacer logout y redirigir al login
+      if (eType === 'auth') {
+        await logout()
+        navigate('/login', { replace: true })
+      }
+
       return
     }
 
