@@ -1,14 +1,15 @@
 // src/components/Map.jsx
 // ─────────────────────────────────────────────────────────────
 // Cambios vs anterior:
-//  - <Polyline> dibujada siguiendo el orden de `route`
-//  - Ruta cerrada: path incluye regreso al origen
-//  - fitBounds sobre el path completo (no solo markers)
-//  - Markers diferenciados: origen (verde), destino final (rojo), intermedios (azul)
-//  - Limpieza de polyline automática cuando route es null
+//  - <Polyline> eliminado
+//  - <RouteDirections> reemplaza la polyline con ruta real en carreteras
+//  - mapInstance en estado (no solo ref) para pasarlo a RouteDirections
+//  - fitBounds solo se ejecuta desde Map cuando NO hay route activo
+//    (cuando hay route, RouteDirections llama fitBounds con el bounds real)
 // ─────────────────────────────────────────────────────────────
-import { useRef, useEffect, useCallback, useMemo } from 'react'
-import { GoogleMap, Marker, Polyline } from '@react-google-maps/api'
+import { useRef, useEffect, useCallback, useMemo, useState } from 'react'
+import { GoogleMap, Marker }  from '@react-google-maps/api'
+import RouteDirections         from './RouteDirections'
 
 const DEFAULT_CENTER  = { lat: 14.6349, lng: -90.5069 }
 const DEFAULT_ZOOM    = 12
@@ -30,16 +31,8 @@ const MAP_OPTIONS = {
   ],
 }
 
-const POLYLINE_OPTIONS = {
-  strokeColor:   '#1D4ED8',
-  strokeOpacity: 0.85,
-  strokeWeight:  4,
-  geodesic:      true,
-}
-
 // ── Icono de marker por rol ───────────────────────────────────
 function markerIcon(role) {
-  // role: 'origin' | 'destination' | 'stop'
   const colors = {
     origin:      { fill: '#16a34a', stroke: '#ffffff' }, // verde
     destination: { fill: '#dc2626', stroke: '#ffffff' }, // rojo
@@ -58,7 +51,15 @@ function markerIcon(role) {
 
 export default function Map({ locations, isLoaded, loadError, route, routeMode }) {
   const mapRef = useRef(null)
-  const handleMapLoad = useCallback((map) => { mapRef.current = map }, [])
+
+  // mapInstance en estado para que RouteDirections reciba la instancia
+  // una vez que el mapa haya montado (mapRef solo no dispara re-render)
+  const [mapInstance, setMapInstance] = useState(null)
+
+  const handleMapLoad = useCallback((map) => {
+    mapRef.current = map
+    setMapInstance(map)
+  }, [])
 
   // Locations con coordenadas válidas
   const validLocs = useMemo(
@@ -74,34 +75,23 @@ export default function Map({ locations, isLoaded, loadError, route, routeMode }
       .map(idx => validLocs[idx])
   }, [route, validLocs])
 
-  // Path de la polyline: coordenadas en orden
-  // Ruta cerrada → añadir el primer punto al final para cerrar el loop
-  const polylinePath = useMemo(() => {
-    if (!route || orderedMarkers.length < 2) return null
-    const path = orderedMarkers.map(loc => ({ lat: loc.lat, lng: loc.lng }))
-    if (routeMode === 'closed') path.push(path[0])
-    return path
-  }, [route, orderedMarkers, routeMode])
-
-  // fitBounds sobre el path completo (no solo markers)
+  // fitBounds solo cuando NO hay route activo.
+  // Cuando route existe, RouteDirections llama fitBounds con el bounds real de la ruta.
   useEffect(() => {
-    if (!mapRef.current) return
+    if (!mapRef.current || route || orderedMarkers.length === 0) return
 
-    const points = polylinePath ?? orderedMarkers.map(l => ({ lat: l.lat, lng: l.lng }))
-
-    if (points.length === 0) return
-
-    if (points.length === 1) {
-      mapRef.current.panTo(points[0])
+    if (orderedMarkers.length === 1) {
+      mapRef.current.panTo({ lat: orderedMarkers[0].lat, lng: orderedMarkers[0].lng })
       mapRef.current.setZoom(14)
       return
     }
 
     const bounds = new window.google.maps.LatLngBounds()
-    points.forEach(p => bounds.extend(p))
+    orderedMarkers.forEach(loc => bounds.extend({ lat: loc.lat, lng: loc.lng }))
     mapRef.current.fitBounds(bounds, { padding: 80 })
-  }, [polylinePath, orderedMarkers])
+  }, [orderedMarkers, route])
 
+  // ── Estados de carga / error ───────────────────────────────
   if (loadError) {
     return (
       <div className="flex flex-col items-center justify-center rounded-xl bg-red-50 border border-red-200 text-red-600" style={{ height: '480px' }}>
@@ -126,8 +116,8 @@ export default function Map({ locations, isLoaded, loadError, route, routeMode }
     )
   }
 
-  const isOptimized  = !!route
-  const lastStepIdx  = orderedMarkers.length - 1
+  const isOptimized = !!route
+  const lastStepIdx = orderedMarkers.length - 1
 
   return (
     <GoogleMap
@@ -137,14 +127,18 @@ export default function Map({ locations, isLoaded, loadError, route, routeMode }
       options={MAP_OPTIONS}
       onLoad={handleMapLoad}
     >
-      {/* ── Polyline ── */}
-      {polylinePath && (
-        <Polyline path={polylinePath} options={POLYLINE_OPTIONS} />
+      {/* ── Ruta real en carreteras (reemplaza <Polyline>) ── */}
+      {route && (
+        <RouteDirections
+          route={route}
+          locations={locations}
+          routeMode={routeMode}
+          mapInstance={mapInstance}
+        />
       )}
 
-      {/* ── Markers ── */}
+      {/* ── Markers personalizados ── */}
       {orderedMarkers.map((loc, step) => {
-        // Determinar rol del marker
         let role = 'stop'
         if (isOptimized) {
           if (step === 0) role = 'origin'
