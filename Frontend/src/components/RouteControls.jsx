@@ -1,9 +1,9 @@
 // src/components/RouteControls.jsx
 // ─────────────────────────────────────────────────────────────
 // Cambios vs anterior:
-//  - Consume nuevo response shape: { success, route, distance, message }
-//  - Guarda route y distance en estado global via props
-//  - RouteResult: muestra la secuencia optimizada y distancia total
+//  - RouteResult rediseñado: paradas, tipo de ruta, distancia como cards
+//  - Leyenda de colores: verde/rojo/azul para origen/destino/parada
+//  - resetResult limpia también la polyline (vía route=null en Map)
 // ─────────────────────────────────────────────────────────────
 import { useState }      from 'react'
 import { optimizeRoute } from '../services/api'
@@ -32,92 +32,110 @@ const ROUTE_MODES = [
   },
 ]
 
-// ── Resultado visual de la ruta optimizada ────────────────────
+// ── Panel de resultados ───────────────────────────────────────
 function RouteResult({ route, distance, locations, routeMode }) {
-  if (!route || !distance) return null
+  if (!route || distance == null) return null
 
   const validLocs  = locations.filter(l => l.lat !== null && l.lng !== null)
   const distanceKm = (distance / 1000).toFixed(2)
+  const stops      = route.length
 
-  // Nombre corto de una dirección
   function shortName(loc) {
     if (!loc?.address) return '—'
-    // Tomar las primeras dos partes de la dirección separadas por coma
     return loc.address.split(',').slice(0, 2).join(',').trim()
   }
 
-  return (
-    <div className="rounded-xl border border-green-200 bg-green-50 p-3.5">
+  function markerDot(role) {
+    const styles = {
+      origin:      'bg-green-500',
+      destination: 'bg-red-500',
+      stop:        'bg-[#1D4ED8]',
+    }
+    return <span className={`flex-shrink-0 w-2.5 h-2.5 rounded-full ${styles[role]}`}/>
+  }
 
-      {/* Header */}
-      <div className="flex items-center justify-between mb-3">
-        <p className="text-xs font-semibold text-green-700 flex items-center gap-1.5">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-            <path d="M20 6L9 17l-5-5"/>
-          </svg>
-          Ruta optimizada
-        </p>
-        <span className="text-xs font-bold text-green-800 bg-green-100 px-2 py-0.5 rounded-full">
-          {distanceKm} km
-          {routeMode === 'closed' && <span className="font-normal text-green-600"> total</span>}
-        </span>
+  return (
+    <div className="rounded-xl border border-green-200 bg-green-50 overflow-hidden">
+
+      {/* ── Métricas ── */}
+      <div className="grid grid-cols-3 divide-x divide-green-200 border-b border-green-200">
+        <div className="px-3 py-2.5 text-center">
+          <p className="text-lg font-bold text-slate-800 leading-tight">{stops}</p>
+          <p className="text-[10px] text-slate-500 uppercase tracking-wide">paradas</p>
+        </div>
+        <div className="px-3 py-2.5 text-center">
+          <p className="text-lg font-bold text-slate-800 leading-tight">{distanceKm}</p>
+          <p className="text-[10px] text-slate-500 uppercase tracking-wide">km totales</p>
+        </div>
+        <div className="px-3 py-2.5 text-center">
+          <p className="text-sm font-bold text-slate-800 leading-tight mt-0.5">
+            {routeMode === 'closed' ? 'Cerrada' : 'Abierta'}
+          </p>
+          <p className="text-[10px] text-slate-500 uppercase tracking-wide">tipo</p>
+        </div>
       </div>
 
-      {/* Secuencia de paradas */}
-      <ol className="flex flex-col gap-1.5">
+      {/* ── Secuencia de paradas ── */}
+      <div className="px-3 py-3 flex flex-col gap-2">
+        <p className="text-[10px] font-semibold text-green-700 uppercase tracking-wider mb-1">
+          Secuencia óptima
+        </p>
+
         {route.map((locIndex, step) => {
           const loc     = validLocs[locIndex]
           const isFirst = step === 0
           const isLast  = step === route.length - 1
 
+          let role = 'stop'
+          if (isFirst) role = 'origin'
+          else if (isLast && routeMode === 'open') role = 'destination'
+
           return (
-            <li key={`${locIndex}-${step}`} className="flex items-start gap-2">
-              {/* Número de paso */}
-              <span className={`
-                flex-shrink-0 w-5 h-5 rounded-full text-xs font-bold
-                flex items-center justify-center mt-0.5
-                ${isFirst
-                  ? 'bg-[#1D4ED8] text-white'
-                  : isLast && routeMode === 'open'
-                    ? 'bg-slate-700 text-white'
-                    : 'bg-white border border-green-300 text-green-700'
-                }
-              `}>
+            <div key={`${locIndex}-${step}`} className="flex items-center gap-2">
+              {markerDot(role)}
+              <span className="text-xs font-semibold text-slate-500 w-4 text-right flex-shrink-0">
                 {step + 1}
               </span>
-
-              {/* Dirección */}
-              <div className="flex-1 min-w-0">
-                <p className="text-xs text-slate-700 leading-snug truncate">
-                  {shortName(loc)}
-                </p>
-                {isFirst && (
-                  <span className="text-[10px] text-blue-500 font-medium">origen</span>
-                )}
-                {isLast && routeMode === 'open' && (
-                  <span className="text-[10px] text-slate-500 font-medium">destino final</span>
-                )}
-              </div>
-            </li>
+              <p className="text-xs text-slate-700 leading-snug truncate flex-1">
+                {shortName(loc)}
+              </p>
+              {isFirst && (
+                <span className="text-[10px] text-green-600 font-semibold flex-shrink-0">inicio</span>
+              )}
+              {isLast && routeMode === 'open' && (
+                <span className="text-[10px] text-red-500 font-semibold flex-shrink-0">fin</span>
+              )}
+            </div>
           )
         })}
 
-        {/* Cierre de ruta circular */}
+        {/* Cierre ruta circular */}
         {routeMode === 'closed' && (
-          <li className="flex items-start gap-2 opacity-50">
-            <span className="flex-shrink-0 w-5 h-5 rounded-full text-xs font-bold flex items-center justify-center mt-0.5 bg-[#1D4ED8] text-white">
-              ↩
-            </span>
-            <p className="text-xs text-slate-500 leading-snug mt-0.5 truncate">
+          <div className="flex items-center gap-2 opacity-40 mt-0.5">
+            {markerDot('origin')}
+            <span className="text-xs font-semibold text-slate-500 w-4 text-right flex-shrink-0">↩</span>
+            <p className="text-xs text-slate-500 truncate flex-1 italic">
               {shortName(validLocs[route[0]])}
             </p>
-          </li>
+          </div>
         )}
-      </ol>
+      </div>
 
-      <p className="text-[10px] text-green-500 mt-2.5">
-        Índices recibidos: [{route.join(', ')}]
-      </p>
+      {/* ── Leyenda ── */}
+      <div className="px-3 pb-3 flex items-center gap-3">
+        {[
+          { color: 'bg-green-500', label: 'Inicio' },
+          { color: 'bg-red-500',   label: 'Final' },
+          { color: 'bg-[#1D4ED8]', label: 'Parada' },
+        ].map(item => (
+          <div key={item.label} className="flex items-center gap-1">
+            <span className={`w-2 h-2 rounded-full ${item.color}`}/>
+            <span className="text-[10px] text-slate-500">{item.label}</span>
+          </div>
+        ))}
+        <span className="ml-auto text-[10px] text-slate-400">[{route.join('→')}]</span>
+      </div>
+
     </div>
   )
 }
@@ -136,6 +154,7 @@ export default function RouteControls({
   const missingCoords = locations.length - validCount
 
   function resetResult() {
+    // Limpiar route a null también limpia la polyline en Map (depende de route)
     setMatrix(null); setRoute(null); setDistance(null); setApiError(null)
   }
 
@@ -153,22 +172,20 @@ export default function RouteControls({
 
     if (error) { setApiError(error); return }
 
-    // Validar shape del response
     if (!data?.success || !Array.isArray(data?.route) || typeof data?.distance !== 'number') {
       setApiError('El backend devolvió una respuesta inesperada.')
       console.warn('[RouteControls] Response inesperado:', data)
       return
     }
 
-    // ✅ Guardar los tres resultados
-    setMatrix(data.matrix ?? null)       // puede no venir en este endpoint
+    setMatrix(data.matrix ?? null)
     setRoute(data.route)
     setDistance(data.distance)
 
     console.log('──────────────────────────────────────')
-    console.log('[RouteControls] Resultado del algoritmo genético:')
+    console.log('[RouteControls] Resultado algoritmo genético:')
     console.log('  route:   ', data.route)
-    console.log('  distance:', data.distance, 'm')
+    console.log('  distance:', data.distance, 'm →', (data.distance / 1000).toFixed(2), 'km')
     console.log('  message: ', data.message)
     console.log('──────────────────────────────────────')
   }
@@ -219,7 +236,6 @@ export default function RouteControls({
   return (
     <div className="flex flex-col gap-4">
 
-      {/* Selector de modo */}
       <div>
         <p className="text-xs font-medium text-slate-500 mb-2 uppercase tracking-wide">Tipo de ruta</p>
         <div className="grid grid-cols-2 gap-2">
@@ -236,9 +252,7 @@ export default function RouteControls({
                 }
               `}
             >
-              <span className={routeMode === mode.value ? 'text-[#1D4ED8]' : 'text-slate-400'}>
-                {mode.icon}
-              </span>
+              <span className={routeMode === mode.value ? 'text-[#1D4ED8]' : 'text-slate-400'}>{mode.icon}</span>
               <div>
                 <p className="text-xs font-semibold leading-tight">{mode.label}</p>
                 <p className="text-xs text-slate-400 leading-tight mt-0.5">{mode.description}</p>
@@ -248,7 +262,6 @@ export default function RouteControls({
         </div>
       </div>
 
-      {/* Botón calcular */}
       <button
         type="button"
         onClick={handleCalculate}
@@ -288,7 +301,6 @@ export default function RouteControls({
 
       <StatusMessage />
 
-      {/* Resultado del algoritmo genético */}
       <RouteResult
         route={route}
         distance={distance}

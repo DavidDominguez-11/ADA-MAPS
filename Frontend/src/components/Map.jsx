@@ -1,13 +1,14 @@
 // src/components/Map.jsx
 // ─────────────────────────────────────────────────────────────
 // Cambios vs anterior:
-//  - Recibe prop `route` (array de índices del algoritmo)
-//  - Cuando route existe: reordena markers según esos índices
-//  - Números de los markers reflejan el orden optimizado (1, 2, 3…)
-//  - Sin route: comportamiento original (orden de entrada)
+//  - <Polyline> dibujada siguiendo el orden de `route`
+//  - Ruta cerrada: path incluye regreso al origen
+//  - fitBounds sobre el path completo (no solo markers)
+//  - Markers diferenciados: origen (verde), destino final (rojo), intermedios (azul)
+//  - Limpieza de polyline automática cuando route es null
 // ─────────────────────────────────────────────────────────────
 import { useRef, useEffect, useCallback, useMemo } from 'react'
-import { GoogleMap, Marker } from '@react-google-maps/api'
+import { GoogleMap, Marker, Polyline } from '@react-google-maps/api'
 
 const DEFAULT_CENTER  = { lat: 14.6349, lng: -90.5069 }
 const DEFAULT_ZOOM    = 12
@@ -29,42 +30,77 @@ const MAP_OPTIONS = {
   ],
 }
 
-export default function Map({ locations, isLoaded, loadError, route }) {
-  const mapRef = useRef(null)
+const POLYLINE_OPTIONS = {
+  strokeColor:   '#1D4ED8',
+  strokeOpacity: 0.85,
+  strokeWeight:  4,
+  geodesic:      true,
+}
 
+// ── Icono de marker por rol ───────────────────────────────────
+function markerIcon(role) {
+  // role: 'origin' | 'destination' | 'stop'
+  const colors = {
+    origin:      { fill: '#16a34a', stroke: '#ffffff' }, // verde
+    destination: { fill: '#dc2626', stroke: '#ffffff' }, // rojo
+    stop:        { fill: '#1D4ED8', stroke: '#ffffff' }, // azul
+  }
+  const c = colors[role] ?? colors.stop
+  return {
+    path:         window.google.maps.SymbolPath.CIRCLE,
+    scale:        13,
+    fillColor:    c.fill,
+    fillOpacity:  1,
+    strokeColor:  c.stroke,
+    strokeWeight: 2,
+  }
+}
+
+export default function Map({ locations, isLoaded, loadError, route, routeMode }) {
+  const mapRef = useRef(null)
   const handleMapLoad = useCallback((map) => { mapRef.current = map }, [])
 
-  // ── Locations con coordenadas válidas (fuente de verdad) ───
+  // Locations con coordenadas válidas
   const validLocs = useMemo(
     () => locations.filter(l => l.lat !== null && l.lng !== null),
     [locations]
   )
 
-  // ── Markers a renderizar ───────────────────────────────────
-  // Con route: reordenar según los índices del algoritmo.
-  // Sin route: orden original.
+  // Markers en orden optimizado (o de entrada si no hay route)
   const orderedMarkers = useMemo(() => {
     if (!route || route.length === 0) return validLocs
-
     return route
       .filter(idx => idx >= 0 && idx < validLocs.length)
       .map(idx => validLocs[idx])
   }, [route, validLocs])
 
-  // ── fitBounds cuando cambian los markers ───────────────────
-  useEffect(() => {
-    if (!mapRef.current || orderedMarkers.length === 0) return
+  // Path de la polyline: coordenadas en orden
+  // Ruta cerrada → añadir el primer punto al final para cerrar el loop
+  const polylinePath = useMemo(() => {
+    if (!route || orderedMarkers.length < 2) return null
+    const path = orderedMarkers.map(loc => ({ lat: loc.lat, lng: loc.lng }))
+    if (routeMode === 'closed') path.push(path[0])
+    return path
+  }, [route, orderedMarkers, routeMode])
 
-    if (orderedMarkers.length === 1) {
-      mapRef.current.panTo({ lat: orderedMarkers[0].lat, lng: orderedMarkers[0].lng })
+  // fitBounds sobre el path completo (no solo markers)
+  useEffect(() => {
+    if (!mapRef.current) return
+
+    const points = polylinePath ?? orderedMarkers.map(l => ({ lat: l.lat, lng: l.lng }))
+
+    if (points.length === 0) return
+
+    if (points.length === 1) {
+      mapRef.current.panTo(points[0])
       mapRef.current.setZoom(14)
       return
     }
 
     const bounds = new window.google.maps.LatLngBounds()
-    orderedMarkers.forEach(loc => bounds.extend({ lat: loc.lat, lng: loc.lng }))
+    points.forEach(p => bounds.extend(p))
     mapRef.current.fitBounds(bounds, { padding: 80 })
-  }, [orderedMarkers])
+  }, [polylinePath, orderedMarkers])
 
   if (loadError) {
     return (
@@ -90,6 +126,9 @@ export default function Map({ locations, isLoaded, loadError, route }) {
     )
   }
 
+  const isOptimized  = !!route
+  const lastStepIdx  = orderedMarkers.length - 1
+
   return (
     <GoogleMap
       mapContainerStyle={CONTAINER_STYLE}
@@ -98,28 +137,36 @@ export default function Map({ locations, isLoaded, loadError, route }) {
       options={MAP_OPTIONS}
       onLoad={handleMapLoad}
     >
-      {orderedMarkers.map((loc, step) => (
-        <Marker
-          key={`${loc.id}-${step}`}
-          position={{ lat: loc.lat, lng: loc.lng }}
-          label={{
-            text:       String(step + 1),
-            color:      '#ffffff',
-            fontWeight: 'bold',
-            fontSize:   '13px',
-          }}
-          // Primer marker en azul oscuro si ya hay ruta optimizada
-          icon={route && step === 0 ? {
-            path:        window.google.maps.SymbolPath.CIRCLE,
-            scale:       14,
-            fillColor:   '#1E3A8A',
-            fillOpacity: 1,
-            strokeColor: '#ffffff',
-            strokeWeight: 2,
-          } : undefined}
-          title={`${step + 1}. ${loc.address}`}
-        />
-      ))}
+      {/* ── Polyline ── */}
+      {polylinePath && (
+        <Polyline path={polylinePath} options={POLYLINE_OPTIONS} />
+      )}
+
+      {/* ── Markers ── */}
+      {orderedMarkers.map((loc, step) => {
+        // Determinar rol del marker
+        let role = 'stop'
+        if (isOptimized) {
+          if (step === 0) role = 'origin'
+          else if (step === lastStepIdx && routeMode === 'open') role = 'destination'
+        }
+
+        return (
+          <Marker
+            key={`${loc.id}-${step}`}
+            position={{ lat: loc.lat, lng: loc.lng }}
+            icon={isOptimized ? markerIcon(role) : undefined}
+            label={{
+              text:       String(step + 1),
+              color:      '#ffffff',
+              fontWeight: 'bold',
+              fontSize:   '12px',
+            }}
+            title={`${step + 1}. ${loc.address}`}
+            zIndex={role === 'origin' ? 10 : role === 'destination' ? 9 : step}
+          />
+        )
+      })}
     </GoogleMap>
   )
 }
