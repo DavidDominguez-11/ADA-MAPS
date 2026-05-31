@@ -1,9 +1,9 @@
 // src/components/RouteControls.jsx
 // ─────────────────────────────────────────────────────────────
 // Cambios vs anterior:
-//  - RouteResult rediseñado: paradas, tipo de ruta, distancia como cards
-//  - Leyenda de colores: verde/rojo/azul para origen/destino/parada
-//  - resetResult limpia también la polyline (vía route=null en Map)
+//  - RouteResult: nombres completos de dirección (no solo índices)
+//  - execution_time_ms → badge "Calculado en X ms"
+//  - ErrorBanner: distingue network / validation / google_api / optimization
 // ─────────────────────────────────────────────────────────────
 import { useState }      from 'react'
 import { optimizeRoute } from '../services/api'
@@ -32,17 +32,99 @@ const ROUTE_MODES = [
   },
 ]
 
+// ── Mensajes y colores por tipo de error ─────────────────────
+const ERROR_META = {
+  network: {
+    label: 'Sin conexión',
+    hint:  'El servidor no responde. Verifica que el backend esté corriendo.',
+    color: 'text-slate-700 bg-slate-50 border-slate-300',
+    icon: (
+      <svg className="w-3.5 h-3.5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+        <path d="M8.5 2.5a5.5 5.5 0 0 1 7.5 5v1l4 4-4 4v1a5.5 5.5 0 0 1-7.5 5"/>
+        <line x1="1" y1="1" x2="23" y2="23"/>
+      </svg>
+    ),
+  },
+  validation: {
+    label: 'Error de validación',
+    hint:  'El payload enviado no cumple el esquema esperado por el backend.',
+    color: 'text-amber-700 bg-amber-50 border-amber-200',
+    icon: (
+      <svg className="w-3.5 h-3.5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4m0 4h.01"/>
+      </svg>
+    ),
+  },
+  google_api: {
+    label: 'Error de Google API',
+    hint:  'Fallo al obtener la matriz de distancias. Verifica la clave de API y las cuotas.',
+    color: 'text-blue-700 bg-blue-50 border-blue-200',
+    icon: (
+      <svg className="w-3.5 h-3.5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="2" y1="12" x2="22" y2="12"/>
+        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+      </svg>
+    ),
+  },
+  optimization: {
+    label: 'Error de optimización',
+    hint:  'El algoritmo no pudo completar el cálculo. Intenta con otros destinos.',
+    color: 'text-red-700 bg-red-50 border-red-200',
+    icon: (
+      <svg className="w-3.5 h-3.5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+        <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4m0 4h.01"/>
+      </svg>
+    ),
+  },
+  unknown: {
+    label: 'Error inesperado',
+    hint:  'Ocurrió un error desconocido. Revisa la consola para más detalles.',
+    color: 'text-red-700 bg-red-50 border-red-200',
+    icon: (
+      <svg className="w-3.5 h-3.5 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M12 8v4m0 4h.01"/>
+      </svg>
+    ),
+  },
+}
+
+// ── Banner de error categorizado ─────────────────────────────
+function ErrorBanner({ error, errorType }) {
+  if (!error) return null
+  const meta = ERROR_META[errorType] ?? ERROR_META.unknown
+  return (
+    <div className={`flex flex-col gap-1 rounded-lg border px-3 py-2.5 text-xs ${meta.color}`}>
+      <div className="flex items-start gap-1.5">
+        {meta.icon}
+        <div>
+          <span className="font-semibold">{meta.label}: </span>
+          <span>{error}</span>
+        </div>
+      </div>
+      <p className="text-[10px] opacity-70 pl-5">{meta.hint}</p>
+    </div>
+  )
+}
+
 // ── Panel de resultados ───────────────────────────────────────
-function RouteResult({ route, distance, locations, routeMode }) {
+function RouteResult({ route, distance, executionMs, locations, routeMode }) {
   if (!route || distance == null) return null
 
   const validLocs  = locations.filter(l => l.lat !== null && l.lng !== null)
   const distanceKm = (distance / 1000).toFixed(2)
   const stops      = route.length
 
-  function shortName(loc) {
+  // Nombre legible: primera parte de la dirección antes de la primera coma
+  function cityName(loc) {
     if (!loc?.address) return '—'
-    return loc.address.split(',').slice(0, 2).join(',').trim()
+    return loc.address.split(',')[0].trim()
+  }
+
+  // Nombre largo para el tooltip
+  function fullName(loc) {
+    return loc?.address ?? '—'
   }
 
   function markerDot(role) {
@@ -57,7 +139,7 @@ function RouteResult({ route, distance, locations, routeMode }) {
   return (
     <div className="rounded-xl border border-green-200 bg-green-50 overflow-hidden">
 
-      {/* ── Métricas ── */}
+      {/* Métricas */}
       <div className="grid grid-cols-3 divide-x divide-green-200 border-b border-green-200">
         <div className="px-3 py-2.5 text-center">
           <p className="text-lg font-bold text-slate-800 leading-tight">{stops}</p>
@@ -75,9 +157,9 @@ function RouteResult({ route, distance, locations, routeMode }) {
         </div>
       </div>
 
-      {/* ── Secuencia de paradas ── */}
+      {/* Secuencia de paradas con nombres reales */}
       <div className="px-3 py-3 flex flex-col gap-2">
-        <p className="text-[10px] font-semibold text-green-700 uppercase tracking-wider mb-1">
+        <p className="text-[10px] font-semibold text-green-700 uppercase tracking-wider mb-0.5">
           Secuencia óptima
         </p>
 
@@ -91,13 +173,14 @@ function RouteResult({ route, distance, locations, routeMode }) {
           else if (isLast && routeMode === 'open') role = 'destination'
 
           return (
-            <div key={`${locIndex}-${step}`} className="flex items-center gap-2">
+            <div key={`${locIndex}-${step}`} className="flex items-center gap-2" title={fullName(loc)}>
               {markerDot(role)}
-              <span className="text-xs font-semibold text-slate-500 w-4 text-right flex-shrink-0">
+              <span className="text-[10px] font-semibold text-slate-400 w-4 text-right flex-shrink-0">
                 {step + 1}
               </span>
-              <p className="text-xs text-slate-700 leading-snug truncate flex-1">
-                {shortName(loc)}
+              {/* Nombre legible de la ciudad/lugar */}
+              <p className="text-xs text-slate-800 font-medium leading-snug truncate flex-1">
+                {cityName(loc)}
               </p>
               {isFirst && (
                 <span className="text-[10px] text-green-600 font-semibold flex-shrink-0">inicio</span>
@@ -113,27 +196,37 @@ function RouteResult({ route, distance, locations, routeMode }) {
         {routeMode === 'closed' && (
           <div className="flex items-center gap-2 opacity-40 mt-0.5">
             {markerDot('origin')}
-            <span className="text-xs font-semibold text-slate-500 w-4 text-right flex-shrink-0">↩</span>
-            <p className="text-xs text-slate-500 truncate flex-1 italic">
-              {shortName(validLocs[route[0]])}
+            <span className="text-[10px] font-semibold text-slate-400 w-4 text-right flex-shrink-0">↩</span>
+            <p className="text-xs text-slate-500 italic truncate flex-1">
+              {cityName(validLocs[route[0]])}
             </p>
           </div>
         )}
       </div>
 
-      {/* ── Leyenda ── */}
-      <div className="px-3 pb-3 flex items-center gap-3">
+      {/* Footer: leyenda + tiempo de cálculo */}
+      <div className="px-3 pb-3 flex items-center gap-3 flex-wrap">
         {[
-          { color: 'bg-green-500', label: 'Inicio' },
-          { color: 'bg-red-500',   label: 'Final' },
-          { color: 'bg-[#1D4ED8]', label: 'Parada' },
+          { color: 'bg-green-500', label: 'Inicio'  },
+          { color: 'bg-red-500',   label: 'Final'   },
+          { color: 'bg-[#1D4ED8]', label: 'Parada'  },
         ].map(item => (
           <div key={item.label} className="flex items-center gap-1">
             <span className={`w-2 h-2 rounded-full ${item.color}`}/>
             <span className="text-[10px] text-slate-500">{item.label}</span>
           </div>
         ))}
-        <span className="ml-auto text-[10px] text-slate-400">[{route.join('→')}]</span>
+
+        {/* Tiempo de cálculo */}
+        {executionMs != null && (
+          <span className="ml-auto text-[10px] text-slate-400 flex items-center gap-1">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <circle cx="12" cy="12" r="10"/>
+              <path d="M12 6v6l4 2"/>
+            </svg>
+            Calculado en {executionMs} ms
+          </span>
+        )}
       </div>
 
     </div>
@@ -147,15 +240,17 @@ export default function RouteControls({
   route,    setRoute,
   distance, setDistance,
 }) {
-  const [loading,  setLoading]  = useState(false)
-  const [apiError, setApiError] = useState(null)
+  const [loading,     setLoading]     = useState(false)
+  const [apiError,    setApiError]    = useState(null)
+  const [errorType,   setErrorType]   = useState(null)
+  const [executionMs, setExecutionMs] = useState(null)
 
   const validCount    = locations.filter(l => l.lat !== null).length
   const missingCoords = locations.length - validCount
 
   function resetResult() {
-    // Limpiar route a null también limpia la polyline en Map (depende de route)
-    setMatrix(null); setRoute(null); setDistance(null); setApiError(null)
+    setMatrix(null); setRoute(null); setDistance(null)
+    setApiError(null); setErrorType(null); setExecutionMs(null)
   }
 
   async function handleCalculate() {
@@ -163,17 +258,22 @@ export default function RouteControls({
     resetResult()
     setLoading(true)
 
-    const { data, error } = await optimizeRoute({
+    const { data, error, errorType: eType } = await optimizeRoute({
       locations: locations.filter(l => l.lat !== null && l.lng !== null),
       mode:      routeMode,
     })
 
     setLoading(false)
 
-    if (error) { setApiError(error); return }
+    if (error) {
+      setApiError(error)
+      setErrorType(eType)
+      return
+    }
 
     if (!data?.success || !Array.isArray(data?.route) || typeof data?.distance !== 'number') {
       setApiError('El backend devolvió una respuesta inesperada.')
+      setErrorType('unknown')
       console.warn('[RouteControls] Response inesperado:', data)
       return
     }
@@ -181,26 +281,18 @@ export default function RouteControls({
     setMatrix(data.matrix ?? null)
     setRoute(data.route)
     setDistance(data.distance)
+    setExecutionMs(data.execution_time_ms ?? null)
 
     console.log('──────────────────────────────────────')
     console.log('[RouteControls] Resultado algoritmo genético:')
-    console.log('  route:   ', data.route)
-    console.log('  distance:', data.distance, 'm →', (data.distance / 1000).toFixed(2), 'km')
-    console.log('  message: ', data.message)
+    console.log('  route:        ', data.route)
+    console.log('  distance:     ', data.distance, 'm →', (data.distance / 1000).toFixed(2), 'km')
+    console.log('  execution_ms: ', data.execution_time_ms ?? 'no reportado')
+    console.log('  message:      ', data.message)
     console.log('──────────────────────────────────────')
   }
 
   function StatusMessage() {
-    if (apiError) {
-      return (
-        <div className="flex items-start gap-1.5 rounded-lg bg-red-50 border border-red-200 px-3 py-2.5 text-xs text-red-700">
-          <svg className="mt-0.5 shrink-0 w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4m0 4h.01"/>
-          </svg>
-          <span>{apiError}</span>
-        </div>
-      )
-    }
     if (!radiusValidation.valid) {
       return (
         <div className="flex items-start gap-1.5 rounded-lg bg-red-50 border border-red-200 px-3 py-2.5 text-xs text-red-700">
@@ -299,11 +391,15 @@ export default function RouteControls({
         )}
       </button>
 
+      {/* Error categorizado */}
+      <ErrorBanner error={apiError} errorType={errorType} />
+
       <StatusMessage />
 
       <RouteResult
         route={route}
         distance={distance}
+        executionMs={executionMs}
         locations={locations}
         routeMode={routeMode}
       />
