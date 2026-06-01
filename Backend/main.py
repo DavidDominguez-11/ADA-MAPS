@@ -31,7 +31,28 @@ from app.utils.logger import get_logger
 logger = get_logger(__name__)
 
 # Orígenes permitidos — ajustar cuando el frontend tenga dominio fijo
-ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")
+ALLOWED_ORIGINS = os.getenv(
+    "ALLOWED_ORIGINS", 
+    "http://localhost:5173,http://localhost:3000,https://ada-maps.vercel.app"
+).split(",")
+
+ALLOWED_IPS = {
+    "190.149.42.226",
+    "186.151.64.76",
+    "192.168.1.14",
+    "2800:98:1121:d4:c814:a9d0:1206:2b28",
+}
+
+
+def get_client_ip(request) -> str:
+    """
+    Obtiene la IP real del cliente usando
+    la cabecera X-Forwarded-For de Google.
+    """
+    forwarded_for = request.headers.get("X-Forwarded-For", "")
+    if not forwarded_for:
+        return ""
+    return forwarded_for.split(",")[0].strip()
 
 
 def _cors_headers(origin: str) -> dict:
@@ -58,6 +79,21 @@ def optimize_route(request):
     # Preflight CORS — browsers lo envían antes del POST real
     if request.method == "OPTIONS":
         return ("", 204, cors)
+
+    # ------------------------------------------------------------------
+    # 0. Validar IP del cliente
+    # ------------------------------------------------------------------
+    client_ip = get_client_ip(request)
+
+    if client_ip not in ALLOWED_IPS:
+        logger.warning("IP bloqueada: %s", client_ip)
+        return (
+            json.dumps({"success": False, "message": "IP no autorizada."}),
+            403,
+            {**cors, "Content-Type": "application/json"},
+        )
+
+    logger.info("Request desde IP autorizada: %s", client_ip)
 
     if request.method != "POST":
         return (
