@@ -2,7 +2,10 @@ import os
 import requests
 from typing import List
 
-API_KEY = os.getenv("GOOGLE_MAPS_API_KEY")
+
+def get_api_key():
+    return os.getenv("GOOGLE_MAPS_API_KEY").strip()
+
 
 DISTANCE_MATRIX_URL = "https://maps.googleapis.com/maps/api/distancematrix/json"
 
@@ -29,7 +32,9 @@ def build_distance_matrix(locations) -> List[List[int]]:
     Raises:
         DistanceMatrixError: Si la API falla o devuelve datos inválidos.
     """
-    if not API_KEY:
+    api_key = get_api_key()
+
+    if not api_key:
         raise DistanceMatrixError(
             "GOOGLE_MAPS_API_KEY no está definida en las variables de entorno."
         )
@@ -55,7 +60,7 @@ def build_distance_matrix(locations) -> List[List[int]]:
             params={
                 "origins": locations_string,
                 "destinations": locations_string,
-                "key": API_KEY,
+                "key": api_key,
                 "units": "metric",
             },
             timeout=10,
@@ -67,6 +72,8 @@ def build_distance_matrix(locations) -> List[List[int]]:
         raise DistanceMatrixError(f"Error de red al llamar Google API: {e}")
 
     data = response.json()
+
+    print("DISTANCE MATRIX RESPONSE:", data)
 
     # Google puede responder 200 OK pero con error interno
     api_status = data.get("status")
