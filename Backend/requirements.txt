@@ -1,0 +1,10 @@
+# requirements.txt para Google Cloud Functions
+
+# Google Cloud Functions usa este archivo, no pyproject.toml
+# Mantener sincronizado con pyproject.toml
+
+functions-framework>=3.0.0
+requests>=2.32.0
+pydantic>=2.0.0
+firebase-admin>=6.0.0
+python-dotenv>=1.0.0
