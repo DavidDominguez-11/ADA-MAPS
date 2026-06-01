@@ -16,10 +16,15 @@ yarn-error.log*
 
 # Environment variables (Crucial for security)
 .env
-.env.development.local
-.env.test.local
-.env.production.local
-.env.local
+.env.*
+serviceAccountKey.json
+*-credentials.json
+firebase-key.json
+
+# Caches
+.vite/
+.turbo/
+.cache/
 
 # Editor/OS specific
 .vscode/
