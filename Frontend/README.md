@@ -1,126 +1,96 @@
-# Route Optimizer — Módulo de Autenticación
+# Frontend - ADA-MAPS Route Optimizer
 
-Sistema de autenticación completo con **Firebase Auth** + **React + Vite + Tailwind CSS**.
+This is the client-side application for the ADA-MAPS project. It provides a modern, interactive interface to manage destinations, visualize optimized routes on a map, and securely authenticate users.
 
----
+## Overview
+Built with **React** and **Vite**, the frontend serves as the control center where users interact with Google Maps and the custom Genetic Algorithm backend. It focuses on providing real-time feedback, address autocompletion, and precise geographic visualization.
 
-## 🗂️ Estructura del proyecto
+## Responsibilities
+- **User Interface**: Providing a clean, responsive Dashboard for route planning.
+- **Geolocation**: Using Google Places to search and validate addresses.
+- **Visualization**: Rendering markers and complex route paths using Google Maps JavaScript API.
+- **Client-side Validation**: Enforcing business rules (distance radius and destination limits) before hitting the backend.
+- **Auth Management**: Handling session persistence and secure token delivery via Firebase.
 
+## Internal Architecture
+The project structure is organized by feature and role:
+
+- `src/pages/`: Main application views (`Login`, `Dashboard`).
+- `src/components/`: Reusable UI elements and complex map-related components.
+- `src/context/`: Global state management, primarily for `AuthContext`.
+- `src/services/`: External API communications.
+- `src/utils/`: Pure logic helpers (e.g., distance calculations).
+- `src/firebase/`: Firebase SDK configuration and initialization.
+
+## Core Components Breakdown
+
+### Pages
+- **`Login.jsx`**: Simple entry point using Firebase Google Auth.
+- **`Dashboard.jsx`**: The main workspace where inputs, controls, and the map reside.
+
+### Components
+- **`DestinationInput.jsx`**: Integrates **Google Places Autocomplete**. It ensures every destination has valid latitude/longitude coordinates before being processed.
+- **`Map.jsx`**: The primary canvas. It manages the lifecycle of the Google Map instance and coordinates markers.
+- **`RouteDirections.jsx`**: Specifically handles the **Google Directions Service**. When an optimized route is received, this component calculates the road-bound path between stops and renders it via `DirectionsRenderer`.
+- **`RouteControls.jsx`**: Handles the optimization parameters (Open/Closed loop) and triggers the backend request with the current Firebase token.
+- **`ProtectedRoute.jsx`**: A wrapper that ensures only authenticated users can access the Dashboard.
+
+### Services & Utils
+- **`services/api.js`**: A clean fetch-based wrapper for the Cloud Function endpoint. It automatically includes the **Bearer Token** in the headers.
+- **`utils/haversine.js`**: Implements the Haversine formula to calculate the "as-the-crow-flies" distance between points for client-side validation.
+
+## Application Flows
+
+### 1. Authentication Flow
+User (Login) → Firebase Google Auth → ID Token received → Context Update → Redirect to Dashboard.
+
+### 2. Optimization Flow
+Input destinations → **Client Validation** (2-15 nodes, <100km radius) → Fetch Firebase Token → Call Backend API → Receive Optimized Sequence → Update Map state.
+
+### 3. Map & Routing Flow
+Locations update → Markers rendered → Optimized result arrives → `RouteDirections` calls `DirectionsService` → Path rendered on map following actual roads.
+
+## Validations & Constraints
+To ensure optimal performance and API efficiency, the following rules are enforced:
+- **Destination Limit**: Between **2 and 15** destinations per request.
+- **Maximum Radius**: All points must be within a **100 km radius** of each other (to prevent Distance Matrix timeouts and ensure logical route planning).
+- **Valid Coordinates**: Optimization is only enabled once all input fields are linked to a valid Google Place result.
+
+## Setup & Configuration
+
+### Environment Variables
+Create a `.env` file in the `Frontend/` directory:
+```env
+VITE_GOOGLE_MAPS_API_KEY=your_google_key
+VITE_API_URL=your_backend_cloud_function_url
+VITE_FIREBASE_API_KEY=...
+VITE_FIREBASE_AUTH_DOMAIN=...
+VITE_FIREBASE_PROJECT_ID=...
+VITE_FIREBASE_STORAGE_BUCKET=...
+VITE_FIREBASE_MESSAGING_SENDER_ID=...
+VITE_FIREBASE_APP_ID=...
 ```
-auth-system/
-├── .env.example              ← Plantilla de variables de entorno
-├── index.html
-├── package.json
-├── vite.config.js
-├── tailwind.config.js
-├── postcss.config.js
-└── src/
-    ├── main.jsx              ← Entry point
-    ├── App.jsx               ← Router + rutas protegidas
-    ├── index.css             ← Tailwind base styles
-    ├── firebase/
-    │   └── config.js         ← Inicialización Firebase (lee .env)
-    ├── context/
-    │   └── AuthContext.jsx   ← Estado global de auth + acciones
-    ├── components/
-    │   └── ProtectedRoute.jsx← Guarda de rutas privadas
-    └── pages/
-        ├── Login.jsx         ← Pantalla de login (diseño Technical Map)
-        └── Dashboard.jsx     ← App principal (ruta protegida)
-```
 
----
-
-## ⚙️ Setup — paso a paso
-
-### 1. Instalar dependencias
-
+### Installation
 ```bash
 npm install
-```
-
-### 2. Configurar Firebase
-
-1. Ve a [Firebase Console](https://console.firebase.google.com/) → **Agregar proyecto**
-2. En tu proyecto: **Authentication** → **Sign-in method** → activa:
-   - ✅ Email/contraseña
-   - ✅ Google
-3. Ve a **Configuración del proyecto** → **Tus apps** → agrega app web
-4. Copia las credenciales que aparecen
-
-### 3. Crear el archivo `.env`
-
-Copia `.env.example` como `.env` en la raíz del proyecto y pega tus credenciales:
-
-```bash
-cp .env.example .env
-```
-
-```env
-VITE_FIREBASE_API_KEY=AIza...
-VITE_FIREBASE_AUTH_DOMAIN=tu-proyecto.firebaseapp.com
-VITE_FIREBASE_PROJECT_ID=tu-proyecto
-VITE_FIREBASE_STORAGE_BUCKET=tu-proyecto.appspot.com
-VITE_FIREBASE_MESSAGING_SENDER_ID=123456789
-VITE_FIREBASE_APP_ID=1:123456789:web:abc123
-```
-
-> ⚠️ **NUNCA subas el `.env` real a Git.** Ya está en `.gitignore` por defecto.
-
-### 4. Levantar en desarrollo
-
-```bash
 npm run dev
 ```
 
-Abre [http://localhost:5173](http://localhost:5173)
+## Integrations
+- **Firebase**: Used for Identity Platform. Every request to the backend includes a short-lived ID Token for verification.
+- **Google Maps Platform**:
+  - **JavaScript API**: For the interactive map.
+  - **Places API**: For the address autocomplete search.
+  - **Directions API**: To render the actual driving path between optimized waypoints.
+- **Cloud Function**: Connected via standard HTTP POST requests to the `/optimize` endpoint.
+
+## Error Handling
+The UI categorizes errors to provide better feedback:
+- **Network Errors**: Backend unreachable.
+- **Auth Errors**: Automatic logout if the token expires.
+- **Validation Errors**: Feedback on missing coordinates or radius violations.
+- **API Errors**: Failures reported by the Google Maps or Distance Matrix services.
 
 ---
-
-## 🔐 Flujo de autenticación
-
-```
-Usuario abre la app
-      │
-      ▼
-¿Hay sesión activa? (onAuthStateChanged)
-      │
-   No │                  Sí
-      ▼                   ▼
-  /login              / (Dashboard)
-      │
-  Ingresa credenciales
-      │
-      ├── Email/Password → Firebase Auth
-      └── Google Sign-In → Popup OAuth
-              │
-              ▼
-        Token válido → estado global actualiza
-              │
-              ▼
-         / (Dashboard)  ← ruta protegida
-```
-
----
-
-## 🧩 Archivos clave
-
-| Archivo | Responsabilidad |
-|---|---|
-| `firebase/config.js` | Inicializa Firebase; lee todas las keys desde `.env` |
-| `context/AuthContext.jsx` | Estado global (`currentUser`, `loading`); expone `login`, `loginWithGoogle`, `logout`; maneja errores con mensajes legibles |
-| `components/ProtectedRoute.jsx` | Redirige a `/login` si no hay sesión; muestra spinner mientras Firebase verifica |
-| `pages/Login.jsx` | UI completa + llama a `useAuth()` para autenticar |
-| `pages/Dashboard.jsx` | Página protegida; muestra info de usuario + logout |
-
----
-
-## 🏗️ Build para producción
-
-```bash
-npm run build
-```
-
-Los archivos estáticos quedan en `dist/`. Despliega en Vercel, Netlify, Firebase Hosting, etc.
-
-> En tu plataforma de deploy configura las mismas variables de entorno (`VITE_*`) que están en `.env`.
+© 2026 ADA-MAPS Frontend Team.
