@@ -1,45 +1,39 @@
 // src/components/ProtectedRoute.jsx
-// ─────────────────────────────────────────────────────────────
-// Guarda de ruta: redirige a /login si el usuario no está autenticado.
-// Muestra un spinner mientras Firebase verifica la sesión inicial.
-// ─────────────────────────────────────────────────────────────
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
 export default function ProtectedRoute({ children }) {
   const { currentUser, loading } = useAuth()
 
-  // Mientras Firebase verifica la sesión, no redirigir aún
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="flex flex-col items-center gap-3">
-          <svg
-            className="animate-spin h-9 w-9 text-navy-700"
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-          >
-            <circle
-              className="opacity-25"
-              cx="12" cy="12" r="10"
-              stroke="currentColor" strokeWidth="4"
-            />
-            <path
-              className="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8v8H4z"
-            />
-          </svg>
-          <span className="text-sm text-slate-400 font-mono tracking-wide">
-            Verificando sesión…
-          </span>
-        </div>
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexDirection: 'column',
+        gap: 12,
+        background: '#1a1a22',
+        fontFamily: 'Poppins, sans-serif',
+      }}>
+        <span style={{
+          width: 28,
+          height: 28,
+          border: '2.5px solid rgba(224,123,74,0.2)',
+          borderTopColor: '#e07b4a',
+          borderRadius: '50%',
+          animation: 'prSpin 0.75s linear infinite',
+          display: 'inline-block',
+        }}/>
+        <span style={{ fontSize: 12, color: '#7a7a8a', letterSpacing: '0.04em' }}>
+          Verificando sesión…
+        </span>
+        <style>{`@keyframes prSpin { to { transform: rotate(360deg); } }`}</style>
       </div>
     )
   }
 
-  // Si no hay usuario autenticado → redirigir al login
   if (!currentUser) {
     return <Navigate to="/login" replace />
   }

@@ -1,25 +1,24 @@
-// src/pages/Dashboard.jsx
-// ─────────────────────────────────────────────────────────────
-// Cambios vs anterior:
-//  - Estado `route` (índices ordenados) y `distance` (metros totales)
-//  - handleSetLocations limpia también route y distance
-//  - route y distance pasados a RouteControls y Map
-// ─────────────────────────────────────────────────────────────
-import { useState }        from 'react'
-import { useNavigate }     from 'react-router-dom'
-import { useJsApiLoader }  from '@react-google-maps/api'
-import { useAuth }         from '../context/AuthContext'
-import DestinationInput    from '../components/DestinationInput'
-import Map                 from '../components/Map'
-import RouteControls       from '../components/RouteControls'
-import { validateRadius }  from '../utils/haversine'
+// src/pages/Dashboard.jsx — ADA Maps v4
+import { useState }       from 'react'
+import { useNavigate }    from 'react-router-dom'
+import { useJsApiLoader } from '@react-google-maps/api'
+import { useAuth }        from '../context/AuthContext'
+import Header             from '../components/Header'
+import StatusBar          from '../components/StatusBar'
+import DestinationInput   from '../components/DestinationInput'
+import Map                from '../components/Map'
+import RouteControls      from '../components/RouteControls'
+import { validateRadius } from '../utils/haversine'
 
-const GOOGLE_MAPS_LIBRARIES = ['places']
+// IMPORTANTE: debe ser un array estático fuera del componente
+// para que useJsApiLoader no lo detecte como cambio en cada render
+const LIBRARIES = ['places']
 
-const INITIAL_LOCATIONS = [
-  { id: crypto.randomUUID(), address: '', lat: null, lng: null },
-  { id: crypto.randomUUID(), address: '', lat: null, lng: null },
-]
+function makeLocation() {
+  return { id: crypto.randomUUID(), address: '', lat: null, lng: null }
+}
+
+const INITIAL_LOCATIONS = [makeLocation(), makeLocation()]
 
 export default function Dashboard() {
   const { currentUser, logout } = useAuth()
@@ -27,28 +26,22 @@ export default function Dashboard() {
 
   const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY,
-    libraries:        GOOGLE_MAPS_LIBRARIES,
+    libraries: LIBRARIES,
   })
 
-  const [locations, setLocations] = useState(INITIAL_LOCATIONS)
-  const [routeMode, setRouteMode] = useState('closed')
-
-  // ── Resultado del algoritmo genético ──────────────────────
-  const [matrix,   setMatrix]   = useState(null)  // NxN · metros
-  const [route,    setRoute]    = useState(null)  // [0, 2, 1, ...] índices optimizados
-  const [distance, setDistance] = useState(null)  // metros totales del recorrido
-
+  const [locations,  setLocations]  = useState(INITIAL_LOCATIONS)
+  const [routeMode,  setRouteMode]  = useState('closed')
+  const [matrix,     setMatrix]     = useState(null)
+  const [route,      setRoute]      = useState(null)
+  const [distance,   setDistance]   = useState(null)
   const [logoutLoad, setLogoutLoad] = useState(false)
 
   const radiusValidation = validateRadius(locations)
   const validLocations   = locations.filter(l => l.lat !== null && l.lng !== null)
   const canCalculate     = validLocations.length >= 2 && radiusValidation.valid
 
-  // Limpiar todo el resultado si el usuario toca los destinos
   function handleSetLocations(updater) {
-    setMatrix(null)
-    setRoute(null)
-    setDistance(null)
+    setMatrix(null); setRoute(null); setDistance(null)
     setLocations(updater)
   }
 
@@ -59,114 +52,196 @@ export default function Dashboard() {
     if (!error) navigate('/login', { replace: true })
   }
 
-  const displayName = currentUser?.displayName ?? null
-  const email       = currentUser?.email       ?? ''
-  const photoURL    = currentUser?.photoURL    ?? null
-  const initials    = (displayName ?? email).slice(0, 2).toUpperCase()
-
   return (
-    <div className="min-h-screen bg-slate-50 font-sans">
+    <>
+      <style>{`
+        .db {
+          min-height: 100vh;
+          background: var(--background);
+          display: flex;
+          flex-direction: column;
+          font-family: 'Poppins', sans-serif;
+        }
 
-      <header className="bg-white border-b border-slate-200 px-5 py-3 flex items-center justify-between sticky top-0 z-10">
-        <div className="flex items-center gap-2.5">
-          <svg width="20" height="20" viewBox="0 0 48 48" fill="none" aria-hidden="true">
-            <line x1="12" y1="36" x2="24" y2="12" stroke="#1D4ED8" strokeWidth="2.5" strokeLinecap="round"/>
-            <line x1="24" y1="12" x2="38" y2="28" stroke="#1D4ED8" strokeWidth="2.5" strokeLinecap="round"/>
-            <line x1="12" y1="36" x2="38" y2="28" stroke="#93C5FD" strokeWidth="2" strokeLinecap="round"/>
-            <circle cx="24" cy="12" r="4" fill="#1D4ED8"/>
-            <circle cx="38" cy="28" r="4" fill="#1D4ED8"/>
-            <circle cx="12" cy="36" r="4" fill="#1E3A8A"/>
-          </svg>
-          <span className="text-xs font-mono text-slate-400 tracking-widest uppercase select-none hidden sm:block">
-            Route Optimizer v1.0
-          </span>
-        </div>
-        <div className="flex items-center gap-3">
-          {photoURL ? (
-            <img src={photoURL} alt="Avatar" className="w-7 h-7 rounded-full object-cover border border-slate-200"/>
-          ) : (
-            <div className="w-7 h-7 rounded-full bg-[#1D4ED8] flex items-center justify-center text-white text-xs font-bold select-none">
-              {initials}
-            </div>
-          )}
-          <span className="text-xs text-slate-500 hidden sm:block truncate max-w-[160px]">{email}</span>
-          <button
-            onClick={handleLogout}
-            disabled={logoutLoad}
-            className="text-xs font-medium text-slate-500 border border-slate-200 rounded-lg px-3 py-1.5 hover:bg-slate-50 transition-colors disabled:opacity-50"
-          >
-            {logoutLoad ? 'Saliendo…' : 'Salir'}
-          </button>
-        </div>
-      </header>
+        .db-main {
+          flex: 1;
+          max-width: 1400px;
+          width: 100%;
+          margin: 0 auto;
+          padding: 20px 16px 32px;
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 16px;
+          align-items: start;
+        }
+        @media (min-width: 1024px) {
+          .db-main {
+            grid-template-columns: 360px 1fr;
+            padding: 24px 24px 40px;
+          }
+        }
 
-      <main className="max-w-7xl mx-auto px-4 py-6">
-        <div className="flex flex-col lg:flex-row gap-5">
+        .db-side { display: flex; flex-direction: column; gap: 12px; }
 
-          <aside className="w-full lg:w-80 flex-shrink-0">
-            <div className="bg-white rounded-xl border border-slate-200 p-5 mb-4"
-                 style={{ boxShadow: '0 2px 12px 0 rgba(30,58,138,0.06)' }}>
-              <h2 className="text-sm font-semibold text-slate-800 mb-4 flex items-center gap-2">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1D4ED8" strokeWidth="2.5" strokeLinecap="round">
-                  <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
-                  <circle cx="12" cy="9" r="2.5"/>
-                </svg>
-                Destinos
-                <span className="ml-auto text-xs font-normal text-slate-400">{locations.length}/15</span>
-              </h2>
-              <DestinationInput
-                locations={locations}
-                setLocations={handleSetLocations}
-                isLoaded={isLoaded}
-              />
-            </div>
+        /* Map card */
+        .mc {
+          background: var(--card);
+          border: 1px solid var(--border);
+          border-radius: 12px;
+          overflow: hidden;
+          display: flex;
+          flex-direction: column;
+        }
+        .mc-hd {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 12px 16px;
+          border-bottom: 1px solid var(--border);
+          flex-shrink: 0;
+        }
+        .mc-hd-l {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 13px;
+          font-weight: 500;
+          color: var(--foreground);
+        }
+        .mc-hd-l svg { color: var(--muted-foreground); }
 
-            <div className="bg-white rounded-xl border border-slate-200 p-5"
-                 style={{ boxShadow: '0 2px 12px 0 rgba(30,58,138,0.06)' }}>
-              <h2 className="text-sm font-semibold text-slate-800 mb-4 flex items-center gap-2">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1D4ED8" strokeWidth="2.5" strokeLinecap="round">
-                  <circle cx="12" cy="12" r="3"/>
-                  <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
-                </svg>
-                Configuración
-              </h2>
-              <RouteControls
-                routeMode={routeMode}
-                setRouteMode={setRouteMode}
-                locations={locations}
-                canCalculate={canCalculate}
-                radiusValidation={radiusValidation}
-                matrix={matrix}   setMatrix={setMatrix}
-                route={route}     setRoute={setRoute}
-                distance={distance} setDistance={setDistance}
-              />
-            </div>
+        .mc-hd-r { display: flex; align-items: center; gap: 10px; }
+        .mc-cnt  { font-size: 12px; color: var(--muted-foreground); }
+        .mc-opt  {
+          font-size: 11px;
+          font-weight: 600;
+          color: var(--success);
+          background: color-mix(in srgb, var(--success) 15%, transparent);
+          border-radius: 6px;
+          padding: 2px 10px;
+        }
+
+        /* Map footer */
+        .mc-foot {
+          display: flex;
+          align-items: center;
+          border-top: 1px solid var(--border);
+          padding: 8px 16px;
+          background: color-mix(in srgb, var(--secondary) 30%, transparent);
+          flex-shrink: 0;
+        }
+        .mc-coord {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 11px;
+          color: var(--muted-foreground);
+          font-family: monospace;
+        }
+        .mc-sep {
+          width: 1px;
+          height: 12px;
+          background: var(--border);
+          margin: 0 12px;
+        }
+
+        /* Ocultar el zoom control blanco nativo de Google Maps */
+        .gm-bundled-control,
+        .gmnoprint:not([data-control-width]),
+        .gm-style-cc,
+        .gm-control-active > img:not(:first-child) {
+          display: none !important;
+        }
+
+        /* Hacer el zoom control visible pero dark */
+        .gm-control-active {
+          background: rgba(26,26,34,0.92) !important;
+          border-radius: 8px !important;
+        }
+
+        /* Ocultar el ícono blanco que aparece en el zoom */
+        .gm-style button img[src*="data:image"] {
+          display: none !important;
+        }
+      `}</style>
+
+      <div className="db">
+        <Header
+          user={currentUser}
+          onLogout={handleLogout}
+          isLoggingOut={logoutLoad}
+        />
+
+        <StatusBar
+          googleMapsActive={isLoaded && !loadError}
+          validDestinations={validLocations.length}
+          totalDestinations={locations.length}
+          hasOptimizedRoute={!!route}
+          totalDistance={distance}
+        />
+
+        <main className="db-main">
+
+          <aside className="db-side">
+            <DestinationInput
+              locations={locations}
+              setLocations={handleSetLocations}
+              isLoaded={isLoaded}
+            />
+            <RouteControls
+              routeMode={routeMode}      setRouteMode={setRouteMode}
+              locations={locations}      canCalculate={canCalculate}
+              radiusValidation={radiusValidation}
+              matrix={matrix}            setMatrix={setMatrix}
+              route={route}              setRoute={setRoute}
+              distance={distance}        setDistance={setDistance}
+            />
           </aside>
 
-          <section className="flex-1 min-w-0">
-            <div className="bg-white rounded-xl border border-slate-200 p-4"
-                 style={{ boxShadow: '0 2px 12px 0 rgba(30,58,138,0.06)' }}>
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1D4ED8" strokeWidth="2.5" strokeLinecap="round">
-                    <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/>
-                    <line x1="8" y1="2" x2="8" y2="18"/>
-                    <line x1="16" y1="6" x2="16" y2="22"/>
-                  </svg>
-                  Vista de mapa
-                </h2>
-                <span className="text-xs text-slate-400">
-                  {validLocations.length} marker{validLocations.length !== 1 ? 's' : ''} activos
-                  {route && <span className="ml-2 text-blue-500 font-medium">· ruta optimizada</span>}
-                </span>
+          <section className="mc">
+            <div className="mc-hd">
+              <div className="mc-hd-l">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                  <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/>
+                  <line x1="8" y1="2" x2="8" y2="18"/>
+                  <line x1="16" y1="6" x2="16" y2="22"/>
+                </svg>
+                Vista de mapa
               </div>
-              {/* route: cuando existe, el mapa reordena los markers según los índices */}
-              <Map locations={locations} isLoaded={isLoaded} loadError={loadError} route={route} routeMode={routeMode} />
+              <div className="mc-hd-r">
+                <span className="mc-cnt">
+                  {validLocations.length} marker{validLocations.length !== 1 ? 's' : ''} activos
+                </span>
+                {route && <span className="mc-opt">Optimizada</span>}
+              </div>
+            </div>
+
+            <Map
+              locations={locations}
+              isLoaded={isLoaded}
+              loadError={loadError}
+              route={route}
+              routeMode={routeMode}
+            />
+
+            <div className="mc-foot">
+              <div className="mc-coord">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="2" y1="12" x2="22" y2="12"/>
+                  <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+                </svg>
+                lat 14.6349° N
+              </div>
+              <div className="mc-sep"/>
+              <div className="mc-coord">lng 90.5069° W</div>
+              <div className="mc-sep"/>
+              <div className="mc-coord">Guatemala City</div>
             </div>
           </section>
 
-        </div>
-      </main>
-    </div>
+        </main>
+      </div>
+    </>
   )
 }

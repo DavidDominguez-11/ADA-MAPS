@@ -1,37 +1,8 @@
-// src/pages/Login.jsx
-// ─────────────────────────────────────────────────────────────
-// Pantalla de Login — Route Optimizer v1.0
-// Diseño: Technical Map Layer
-// Auth: Firebase Email/Password + Google Sign-In
-// ─────────────────────────────────────────────────────────────
+// src/pages/Login.jsx — ADA Maps v4 · Dark Mode
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
-// ── Icono: nodos conectados (grafo de rutas) ─────────────────
-function GraphIcon() {
-  return (
-    <svg
-      width="48" height="48" viewBox="0 0 48 48"
-      fill="none" xmlns="http://www.w3.org/2000/svg"
-      aria-hidden="true"
-    >
-      {/* Aristas */}
-      <line x1="12" y1="36" x2="24" y2="12" stroke="#1D4ED8" strokeWidth="1.8" strokeLinecap="round"/>
-      <line x1="24" y1="12" x2="38" y2="28" stroke="#1D4ED8" strokeWidth="1.8" strokeLinecap="round"/>
-      <line x1="12" y1="36" x2="38" y2="28" stroke="#93C5FD" strokeWidth="1.5" strokeLinecap="round" strokeDasharray="3 3"/>
-      <line x1="24" y1="12" x2="32" y2="38" stroke="#93C5FD" strokeWidth="1.5" strokeLinecap="round" strokeDasharray="3 3"/>
-      <line x1="12" y1="36" x2="32" y2="38" stroke="#1D4ED8" strokeWidth="1.8" strokeLinecap="round"/>
-      {/* Nodos */}
-      <circle cx="24" cy="12" r="4"  fill="#1D4ED8"/>
-      <circle cx="38" cy="28" r="4"  fill="#1D4ED8"/>
-      <circle cx="12" cy="36" r="4"  fill="#1E3A8A"/>
-      <circle cx="32" cy="38" r="3.5" fill="#3B82F6"/>
-    </svg>
-  )
-}
-
-// ── Icono Google ──────────────────────────────────────────────
 function GoogleIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
@@ -43,24 +14,22 @@ function GoogleIcon() {
   )
 }
 
-// ── Fondo: mapa de calles SVG ─────────────────────────────────
-function MapBackground() {
+function GraphIcon() {
   return (
-    <div 
-      className="absolute inset-0 overflow-hidden pointer-events-none bg-[#F8FAFC]"
-      aria-hidden="true"
-    >
-      <img
-        src="src/public/images/bg.png"  // ← Cambia esto por la ruta de tu imagen
-        alt=""
-        className="w-full h-full object-cover opacity-20"
-        aria-hidden="true"
-      />
-    </div>
-  );
+    <svg width="48" height="48" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+      <line x1="12" y1="36" x2="24" y2="12" stroke="#e07b4a" strokeWidth="1.8" strokeLinecap="round"/>
+      <line x1="24" y1="12" x2="38" y2="28" stroke="#e07b4a" strokeWidth="1.8" strokeLinecap="round"/>
+      <line x1="12" y1="36" x2="38" y2="28" stroke="#7a4a30" strokeWidth="1.5" strokeLinecap="round" strokeDasharray="3 3"/>
+      <line x1="24" y1="12" x2="32" y2="38" stroke="#7a4a30" strokeWidth="1.5" strokeLinecap="round" strokeDasharray="3 3"/>
+      <line x1="12" y1="36" x2="32" y2="38" stroke="#e07b4a" strokeWidth="1.8" strokeLinecap="round"/>
+      <circle cx="24" cy="12" r="4" fill="#e07b4a"/>
+      <circle cx="38" cy="28" r="4" fill="#e07b4a"/>
+      <circle cx="12" cy="36" r="4" fill="#c45f2a"/>
+      <circle cx="32" cy="38" r="3.5" fill="#f0a070"/>
+    </svg>
+  )
 }
 
-// ── Componente principal ──────────────────────────────────────
 export default function Login() {
   const { login, loginWithGoogle } = useAuth()
   const navigate = useNavigate()
@@ -68,194 +37,293 @@ export default function Login() {
   const [email,      setEmail]      = useState('')
   const [password,   setPassword]   = useState('')
   const [error,      setError]      = useState('')
-  const [loadingBtn, setLoadingBtn] = useState(false)   // email/pass
-  const [loadingG,   setLoadingG]   = useState(false)   // google
+  const [loadingBtn, setLoadingBtn] = useState(false)
+  const [loadingG,   setLoadingG]   = useState(false)
 
-  // ── Email / Password ────────────────────────────────────────
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
-
     if (!email.trim() || !password.trim()) {
       setError('Por favor completa todos los campos.')
       return
     }
-
     setLoadingBtn(true)
     const { error: err } = await login(email.trim(), password)
     setLoadingBtn(false)
-
-    if (err) {
-      setError(err)
-      return
-    }
+    if (err) { setError(err); return }
     navigate('/', { replace: true })
   }
 
-  // ── Google ──────────────────────────────────────────────────
   async function handleGoogle() {
     setError('')
     setLoadingG(true)
     const { error: err } = await loginWithGoogle()
     setLoadingG(false)
-
-    if (err) {
-      setError(err)
-      return
-    }
+    if (err) { setError(err); return }
     navigate('/', { replace: true })
   }
 
   return (
-    <div className="relative min-h-screen flex items-center justify-center bg-slate-100 font-sans overflow-hidden">
+    <>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
 
-      {/* Mapa de fondo */}
-      <MapBackground />
+        .lg-page {
+          min-height: 100vh;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: #1a1a22;
+          font-family: 'Poppins', sans-serif;
+          padding: 24px 16px;
+          position: relative;
+          overflow: hidden;
+        }
 
-      {/* Card */}
-      <div
-        className="relative z-10 w-full max-w-sm bg-white rounded-xl shadow-card px-8 py-9 animate-fadein"
-        style={{ boxShadow: '0 8px 40px 0 rgba(30,58,138,0.13), 0 2px 8px 0 rgba(30,58,138,0.07)' }}
-      >
+        /* Fondo: bg.png con overlay oscuro encima */
+        .lg-bg {
+          position: absolute;
+          inset: 0;
+          background-image: url('/images/bg.png');
+          background-size: cover;
+          background-position: center;
+          opacity: 0.12;
+          pointer-events: none;
+          z-index: 0;
+        }
+        .lg-overlay {
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(
+            135deg,
+            rgba(26,26,34,0.92) 0%,
+            rgba(20,20,26,0.88) 100%
+          );
+          pointer-events: none;
+          z-index: 2;
+        }
 
-        {/* Header badge */}
-        <p className="text-center text-xs font-mono text-slate-400 tracking-widest uppercase mb-5 select-none">
-          Route Optimizer
-        </p>
+        .lg-card {
+          position: relative;
+          z-index: 3;
+          width: 100%;
+          max-width: 380px;
+          background: #1f1f28;
+          border: 1px solid #2f2f3d;
+          border-radius: 16px;
+          padding: 36px 32px;
+          box-shadow: 0 24px 64px rgba(0,0,0,0.5);
+        }
 
-        {/* Icono grafo */}
-        <div className="flex justify-center mb-4">
-          <GraphIcon />
-        </div>
+        .lg-badge {
+          text-align: center;
+          font-size: 11px;
+          color: #7a7a8a;
+          letter-spacing: 0.12em;
+          text-transform: uppercase;
+          margin-bottom: 20px;
+          font-family: monospace;
+        }
 
-        {/* Título */}
-        <h1 className="text-center text-[1.4rem] font-bold text-slate-900 mb-7 tracking-tight">
-          Bienvenido de nuevo
-        </h1>
+        .lg-icon { display: flex; justify-content: center; margin-bottom: 16px; }
 
-        {/* ── Formulario ── */}
-        <form onSubmit={handleSubmit} noValidate className="space-y-4">
+        .lg-title {
+          text-align: center;
+          font-size: 22px;
+          font-weight: 700;
+          color: #f2f2f2;
+          letter-spacing: -0.02em;
+          margin-bottom: 28px;
+        }
 
-          {/* Email */}
-          <div className="flex flex-col gap-1">
-            <label
-              htmlFor="email"
-              className="text-xs font-medium text-slate-600 tracking-wide"
-            >
-              Email
-            </label>
-            <input
-              id="email"
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              placeholder="tu@correo.com"
-              className="
-                w-full rounded-lg border border-slate-200 bg-white
-                px-3.5 py-2.5 text-sm text-slate-800 placeholder-slate-300
-                outline-none transition-all duration-150
-                focus:border-blue-600 focus:ring-2 focus:ring-blue-100
-              "
-            />
+        .lg-field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
+
+        .lg-label {
+          font-size: 12px;
+          font-weight: 500;
+          color: #9090a8;
+          letter-spacing: 0.03em;
+        }
+
+        .lg-input {
+          width: 100%;
+          background: #252532;
+          border: 1px solid #2f2f3d;
+          border-radius: 9px;
+          padding: 10px 14px;
+          font-size: 14px;
+          font-family: 'Poppins', sans-serif;
+          color: #f2f2f2;
+          outline: none;
+          transition: border-color 0.15s, box-shadow 0.15s;
+        }
+        .lg-input::placeholder { color: #4a4a5a; }
+        .lg-input:focus {
+          border-color: #e07b4a;
+          box-shadow: 0 0 0 3px rgba(224,123,74,0.12);
+        }
+
+        .lg-error {
+          display: flex;
+          align-items: flex-start;
+          gap: 8px;
+          background: rgba(179,64,64,0.1);
+          border: 1px solid rgba(179,64,64,0.25);
+          border-radius: 8px;
+          padding: 10px 14px;
+          font-size: 13px;
+          color: #e07070;
+          margin-bottom: 14px;
+        }
+
+        .lg-btn-primary {
+          width: 100%;
+          background: #e07b4a;
+          color: #111118;
+          border: none;
+          border-radius: 9px;
+          padding: 11px 20px;
+          font-family: 'Poppins', sans-serif;
+          font-size: 14px;
+          font-weight: 600;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          transition: opacity 0.15s, transform 0.1s;
+          margin-top: 4px;
+        }
+        .lg-btn-primary:hover { opacity: 0.9; }
+        .lg-btn-primary:active { transform: scale(0.98); }
+        .lg-btn-primary:disabled { opacity: 0.45; cursor: not-allowed; }
+
+        .lg-divider {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          margin: 20px 0;
+        }
+        .lg-divider-line { flex: 1; height: 1px; background: #2f2f3d; }
+        .lg-divider-text { font-size: 12px; color: #4a4a5a; }
+
+        .lg-btn-google {
+          width: 100%;
+          background: #252532;
+          color: #d0d0e0;
+          border: 1px solid #2f2f3d;
+          border-radius: 9px;
+          padding: 10px 20px;
+          font-family: 'Poppins', sans-serif;
+          font-size: 14px;
+          font-weight: 500;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
+          transition: background 0.12s, border-color 0.12s, transform 0.1s;
+        }
+        .lg-btn-google:hover { background: #2a2a38; border-color: #3a3a4d; }
+        .lg-btn-google:active { transform: scale(0.98); }
+        .lg-btn-google:disabled { opacity: 0.45; cursor: not-allowed; }
+
+        .lg-spin {
+          width: 14px; height: 14px;
+          border: 2px solid rgba(17,17,24,0.3);
+          border-top-color: #111118;
+          border-radius: 50%;
+          animation: lgSpin 0.75s linear infinite;
+          display: inline-block;
+        }
+        .lg-spin-g {
+          width: 14px; height: 14px;
+          border: 2px solid #2f2f3d;
+          border-top-color: #7a7a8a;
+          border-radius: 50%;
+          animation: lgSpin 0.75s linear infinite;
+          display: inline-block;
+        }
+        @keyframes lgSpin { to { transform: rotate(360deg); } }
+      `}</style>
+
+      <div className="lg-page">
+        {/* Fondo imagen */}
+        <div className="lg-bg" aria-hidden="true"/>
+        <div className="lg-overlay" aria-hidden="true"/>
+
+        <div className="lg-card">
+
+          <p className="lg-badge">Route Optimizer</p>
+
+          <div className="lg-icon">
+            <GraphIcon />
           </div>
 
-          {/* Password */}
-          <div className="flex flex-col gap-1">
-            <label
-              htmlFor="password"
-              className="text-xs font-medium text-slate-600 tracking-wide"
-            >
-              Contraseña
-            </label>
-            <input
-              id="password"
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              placeholder="••••••••"
-              className="
-                w-full rounded-lg border border-slate-200 bg-white
-                px-3.5 py-2.5 text-sm text-slate-800 placeholder-slate-300
-                outline-none transition-all duration-150
-                focus:border-blue-600 focus:ring-2 focus:ring-blue-100
-              "
-            />
-          </div>
+          <h1 className="lg-title">Bienvenido de nuevo</h1>
 
-          {/* Error message */}
-          {error && (
-            <div
-              role="alert"
-              className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 px-3.5 py-2.5 text-sm text-red-700"
-            >
-              <svg className="mt-0.5 shrink-0 w-4 h-4" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
-                <path fillRule="evenodd" d="M18 10A8 8 0 1 1 2 10a8 8 0 0 1 16 0zM9 7a1 1 0 0 1 2 0v4a1 1 0 1 1-2 0V7zm1 7a1.25 1.25 0 1 0 0-2.5A1.25 1.25 0 0 0 10 14z" clipRule="evenodd"/>
-              </svg>
-              <span>{error}</span>
+          <form onSubmit={handleSubmit} noValidate>
+            <div className="lg-field">
+              <label className="lg-label" htmlFor="email">Email</label>
+              <input
+                id="email" type="email"
+                className="lg-input"
+                placeholder="tu@correo.com"
+                autoComplete="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+              />
             </div>
-          )}
 
-          {/* Botón principal */}
-          <button
-            type="submit"
-            disabled={loadingBtn || loadingG}
-            className="
-              w-full rounded-lg bg-[#1D4ED8] py-2.5 text-sm font-semibold text-white
-              tracking-wide transition-all duration-150
-              hover:bg-[#1e3a8a] active:scale-[.98]
-              disabled:opacity-60 disabled:cursor-not-allowed
-              flex items-center justify-center gap-2 mt-1
-            "
-          >
-            {loadingBtn ? (
-              <>
-                <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+            <div className="lg-field">
+              <label className="lg-label" htmlFor="password">Contraseña</label>
+              <input
+                id="password" type="password"
+                className="lg-input"
+                placeholder="••••••••"
+                autoComplete="current-password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+              />
+            </div>
+
+            {error && (
+              <div className="lg-error" role="alert">
+                <svg width="14" height="14" viewBox="0 0 20 20" fill="currentColor" style={{ flexShrink: 0, marginTop: 1 }} aria-hidden="true">
+                  <path fillRule="evenodd" d="M18 10A8 8 0 1 1 2 10a8 8 0 0 1 16 0zM9 7a1 1 0 0 1 2 0v4a1 1 0 1 1-2 0V7zm1 7a1.25 1.25 0 1 0 0-2.5A1.25 1.25 0 0 0 10 14z" clipRule="evenodd"/>
                 </svg>
-                Entrando…
-              </>
-            ) : (
-              'Entrar'
+                <span>{error}</span>
+              </div>
             )}
+
+            <button
+              type="submit"
+              className="lg-btn-primary"
+              disabled={loadingBtn || loadingG}
+            >
+              {loadingBtn ? <span className="lg-spin"/> : null}
+              {loadingBtn ? 'Entrando…' : 'Entrar'}
+            </button>
+          </form>
+
+          <div className="lg-divider">
+            <div className="lg-divider-line"/>
+            <span className="lg-divider-text">o</span>
+            <div className="lg-divider-line"/>
+          </div>
+
+          <button
+            type="button"
+            className="lg-btn-google"
+            onClick={handleGoogle}
+            disabled={loadingBtn || loadingG}
+          >
+            {loadingG ? <span className="lg-spin-g"/> : <GoogleIcon/>}
+            {loadingG ? 'Conectando…' : 'Continuar con Google'}
           </button>
-        </form>
 
-        {/* ── Divisor ── */}
-        <div className="relative flex items-center my-5">
-          <div className="flex-1 h-px bg-slate-200" />
-          <span className="mx-3 text-xs text-slate-400 select-none">or</span>
-          <div className="flex-1 h-px bg-slate-200" />
         </div>
-
-        {/* ── Botón Google ── */}
-        <button
-          type="button"
-          onClick={handleGoogle}
-          disabled={loadingBtn || loadingG}
-          className="
-            w-full flex items-center justify-center gap-2.5
-            rounded-lg border border-slate-200 bg-white
-            py-2.5 px-4 text-sm font-medium text-slate-700
-            transition-all duration-150
-            hover:bg-slate-50 hover:border-slate-300 active:scale-[.98]
-            disabled:opacity-60 disabled:cursor-not-allowed
-          "
-        >
-          {loadingG ? (
-            <svg className="animate-spin h-4 w-4 text-slate-500" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
-            </svg>
-          ) : (
-            <GoogleIcon />
-          )}
-          {loadingG ? 'Conectando…' : 'Continuar con Google'}
-        </button>
-
       </div>
-    </div>
+    </>
   )
 }

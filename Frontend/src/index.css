@@ -1,21 +1,140 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* src/index.css — ADA Maps v4 · Dark Theme */
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
 
-@layer base {
-  *, *::before, *::after {
-    box-sizing: border-box;
-  }
-  body {
-    @apply bg-slate-100 text-slate-900;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-  }
+/* ── Design Tokens ── */
+:root {
+  --background:        #1a1a22;
+  --foreground:        #f2f2f2;
+  --card:              #1f1f28;
+  --card-foreground:   #f2f2f2;
+  --popover:           #232330;
+  --popover-foreground:#f2f2f2;
+  --primary:           #e07b4a;
+  --primary-foreground:#111118;
+  --secondary:         #2a2a36;
+  --secondary-foreground: #d9d9d9;
+  --muted:             #2a2a36;
+  --muted-foreground:  #7a7a8a;
+  --accent:            #e07b4a;
+  --accent-foreground: #111118;
+  --destructive:       #b34040;
+  --destructive-foreground: #f2f2f2;
+  --success:           #4caf7a;
+  --success-foreground:#111118;
+  --warning:           #c49a3a;
+  --warning-foreground:#111118;
+  --border:            #2f2f3d;
+  --input:             #252532;
+  --ring:              #e07b4a;
+  --sidebar:           #141420;
+  --sidebar-foreground:#f2f2f2;
+  --sidebar-border:    #2a2a36;
+  --radius:            0.75rem;
 }
 
-@layer utilities {
-  .shadow-card {
-    box-shadow: 0 4px 32px 0 rgba(30, 58, 138, 0.10),
-                0 1.5px 6px 0 rgba(30, 58, 138, 0.07);
-  }
+/* ── Base ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+body {
+  font-family: 'Poppins', sans-serif;
+  background: var(--background);
+  color: var(--foreground);
+  line-height: 1.5;
+  font-size: 16px;
 }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted-foreground); }
+
+/* ══════════════════════════════════════════════════════════════
+   GOOGLE AUTOCOMPLETE — DARK THEME + ANCHO EXTENDIDO
+   ══════════════════════════════════════════════════════════════ */
+
+/* El truco: sobrescribir el width que Google impone inline
+   usando !important + min-width grande para que se extienda */
+.pac-container {
+  font-family: 'Poppins', sans-serif !important;
+  font-size: 13px !important;
+  background: #232330 !important;
+  border: 1px solid #2f2f3d !important;
+  border-radius: 10px !important;
+  box-shadow: 0 16px 48px rgba(0,0,0,0.6) !important;
+  margin-top: 6px !important;
+  overflow: hidden !important;
+  z-index: 9999 !important;
+
+  /* Ancho mínimo amplio — se extiende más allá del input */
+  min-width: 380px !important;
+  max-width: 480px !important;
+
+  /* Evitar que se corte contra el borde del viewport */
+  width: max-content !important;
+}
+
+/* Asegurar que el container no quede truncado */
+.pac-container::after {
+  display: none !important; /* Ocultar el logo "powered by Google" si molesta visualmente */
+}
+
+/* Mantener "powered by Google" pero estilizado */
+.pac-container .pac-logo::after {
+  background-color: #1a1a22 !important;
+  padding: 6px 14px !important;
+}
+
+.pac-item {
+  padding: 10px 16px !important;
+  cursor: pointer !important;
+  border-top: 1px solid #2f2f3d !important;
+  background: #232330 !important;
+  color: #f2f2f2 !important;
+  font-family: 'Poppins', sans-serif !important;
+  font-size: 13px !important;
+  transition: background 0.12s !important;
+  /* Permitir que el texto se vea completo */
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.pac-item:first-child { border-top: none !important; }
+
+.pac-item:hover,
+.pac-item-selected {
+  background: #2a2a36 !important;
+  cursor: pointer !important;
+}
+
+.pac-item-query {
+  font-size: 13px !important;
+  color: #f2f2f2 !important;
+  font-weight: 500 !important;
+  font-family: 'Poppins', sans-serif !important;
+}
+
+.pac-matched {
+  color: #e07b4a !important;
+  font-weight: 600 !important;
+}
+
+/* Ícono de ubicación — reemplazar con color primario */
+.pac-icon {
+  width: 14px !important;
+  margin-top: 2px !important;
+  filter: invert(55%) sepia(40%) saturate(600%) hue-rotate(340deg) !important;
+}
+
+/* "powered by Google" footer */
+.pac-logo {
+  background: #1a1a22 !important;
+  border-top: 1px solid #2f2f3d !important;
+  padding: 4px 12px !important;
+}
+
+/* ── Keyframes ── */
+@keyframes spin   { to { transform: rotate(360deg); } }
+@keyframes pulse  { 0%,100% { opacity:1; } 50% { opacity:.4; } }
+@keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
