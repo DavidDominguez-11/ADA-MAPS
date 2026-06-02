@@ -1,121 +1,127 @@
-// src/components/RouteDirections.jsx
-// ─────────────────────────────────────────────────────────────
-// Responsabilidad única:
-//  - Recibe route (índices), locations, routeMode y mapInstance
-//  - Construye el DirectionsRequest (origin, destination, waypoints)
-//  - Llama a Google Directions Service
-//  - Renderiza <DirectionsRenderer> con la ruta real en carreteras
-//  - Llama fitBounds sobre el bounds real de la ruta
-//
-// Límite Google: 25 waypoints (plan estándar).
-// Este proyecto permite 15 destinos → 13 waypoints → dentro del límite.
-// ─────────────────────────────────────────────────────────────
-import { useState, useEffect } from 'react'
-import { DirectionsRenderer }  from '@react-google-maps/api'
+// src/components/RouteDirections.jsx — ADA Maps v4
+// Cada segmento A→B, B→C, C→D se renderiza con su propio color
+// usando una DirectionsRequest por par de puntos consecutivos.
 
-const POLYLINE_OPTIONS = {
-  strokeColor:   '#1D4ED8',
-  strokeOpacity: 0.85,
-  strokeWeight:  4,
-  geodesic:      true,
-}
+import { useState, useEffect, useRef } from 'react'
+import { DirectionsRenderer } from '@react-google-maps/api'
 
-/**
- * Construye el DirectionsRequest a partir del array de índices.
- *
- * route = [0, 2, 3, 1], routeMode = "open"
- *   → origin      = locations[0]
- *   → waypoints   = [locations[2], locations[3]]
- *   → destination = locations[1]
- *
- * route = [0, 2, 3, 1], routeMode = "closed"
- *   → origin      = locations[0]
- *   → waypoints   = [locations[2], locations[3], locations[1]]
- *   → destination = locations[0]   ← regresa al inicio
- */
-function buildDirectionsRequest(route, validLocs, routeMode) {
-  const ordered = route.map(idx => validLocs[idx])
-  if (ordered.length < 2) return null
+// Misma paleta que los markers — un color por índice de segmento
+const SEGMENT_COLORS = [
+  '#e07b4a', // coral
+  '#4caf7a', // verde
+  '#6b9fff', // azul
+  '#c97cd4', // lila
+  '#f5c842', // amarillo
+  '#4cc9c9', // cian
+  '#e05a8a', // rosa
+  '#a3e07a', // verde lima
+]
 
-  const toLatLng = (loc) => ({ lat: loc.lat, lng: loc.lng })
-
-  const isOpen = routeMode === 'open'
-
-  const origin      = toLatLng(ordered[0])
-  const destination = isOpen ? toLatLng(ordered[ordered.length - 1]) : toLatLng(ordered[0])
-
-  // Para open:   intermedios son todo excepto primer y último
-  // Para closed: intermedios son todo excepto el primero (el último vuelve al origen)
-  const middleLocs = isOpen ? ordered.slice(1, -1) : ordered.slice(1)
-
-  const waypoints = middleLocs.map(loc => ({
-    location: toLatLng(loc),
-    stopover: true,
-  }))
-
+function buildSegmentRequest(origin, destination) {
   return {
-    origin,
-    destination,
-    waypoints,
-    travelMode:         window.google.maps.TravelMode.DRIVING,
-    optimizeWaypoints:  false, // el backend ya optimizó el orden
+    origin:      { lat: origin.lat,      lng: origin.lng },
+    destination: { lat: destination.lat, lng: destination.lng },
+    waypoints:   [],
+    travelMode:  window.google.maps.TravelMode.DRIVING,
+    optimizeWaypoints: false,
   }
 }
 
 export default function RouteDirections({ route, locations, routeMode, mapInstance }) {
-  const [directions, setDirections] = useState(null)
-  const [dirError,   setDirError]   = useState(null)
+  // Array de resultados de Directions, uno por segmento
+  const [segments, setSegments] = useState([])
+  const isMounted = useRef(true)
 
   useEffect(() => {
-    // Limpiar resultado anterior al cambiar inputs
-    setDirections(null)
-    setDirError(null)
+    isMounted.current = true
+    return () => { isMounted.current = false }
+  }, [])
+
+  useEffect(() => {
+    setSegments([])
 
     if (!route || !mapInstance || !window.google) return
 
     const validLocs = locations.filter(l => l.lat !== null && l.lng !== null)
-    const request   = buildDirectionsRequest(route, validLocs, routeMode)
-    if (!request) return
+    if (validLocs.length < 2) return
+
+    // Construir lista ordenada de puntos según la ruta
+    const ordered = route
+      .filter(idx => idx >= 0 && idx < validLocs.length)
+      .map(idx => validLocs[idx])
+
+    if (ordered.length < 2) return
+
+    // Para ruta cerrada, agregar el punto de inicio al final
+    const points = routeMode === 'closed'
+      ? [...ordered, ordered[0]]
+      : ordered
+
+    // Crear los pares de segmentos: [A→B, B→C, C→D, ...]
+    const pairs = []
+    for (let i = 0; i < points.length - 1; i++) {
+      pairs.push({ from: points[i], to: points[i + 1], index: i })
+    }
 
     const service = new window.google.maps.DirectionsService()
+    const results = new Array(pairs.length).fill(null)
+    let completed = 0
 
-    service.route(request, (result, status) => {
-      if (status === window.google.maps.DirectionsStatus.OK) {
-        setDirections(result)
+    pairs.forEach(({ from, to, index }) => {
+      const request = buildSegmentRequest(from, to)
 
-        // fitBounds usando el bounds real de la ruta (incluye curvas de carretera)
-        if (result.routes[0]?.bounds) {
-          mapInstance.fitBounds(result.routes[0].bounds, { padding: 80 })
+      service.route(request, (result, status) => {
+        if (!isMounted.current) return
+
+        completed++
+
+        if (status === window.google.maps.DirectionsStatus.OK) {
+          results[index] = result
+
+          // fitBounds solo al terminar el primer segmento con el bounds total
+          if (completed === 1 && mapInstance && result.routes[0]?.bounds) {
+            // Calcular bounds global de todos los puntos
+            const totalBounds = new window.google.maps.LatLngBounds()
+            points.forEach(p => totalBounds.extend({ lat: p.lat, lng: p.lng }))
+            mapInstance.fitBounds(totalBounds, { padding: 80 })
+          }
+        } else {
+          console.warn(`[RouteDirections] Segmento ${index} falló:`, status)
         }
-      } else {
-        setDirError(status)
-        console.error('[RouteDirections] Directions API error:', status)
-      }
+
+        // Cuando todos terminaron, actualizar el estado de una sola vez
+        if (completed === pairs.length) {
+          if (isMounted.current) {
+            setSegments(results.filter(Boolean))
+          }
+        }
+      })
     })
 
-    // Cleanup: si route cambia antes de que responda, ignorar resultado anterior
     return () => {
-      setDirections(null)
+      // Cleanup: descartar resultados si cambia la ruta
+      isMounted.current = false
     }
   }, [route, locations, routeMode, mapInstance])
 
-  // Error de Directions API — silencioso en el mapa, visible en consola
-  // (el panel de resultados ya muestra el resumen; no duplicar UI de error aquí)
-  if (dirError) {
-    console.warn('[RouteDirections] No se pudo trazar la ruta real:', dirError)
-    return null
-  }
-
-  if (!directions) return null
-
   return (
-    <DirectionsRenderer
-      directions={directions}
-      options={{
-        suppressMarkers:  true,        // usamos nuestros marcadores personalizados
-        suppressInfoWindows: true,
-        polylineOptions:  POLYLINE_OPTIONS,
-      }}
-    />
+    <>
+      {segments.map((directions, i) => (
+        <DirectionsRenderer
+          key={i}
+          directions={directions}
+          options={{
+            suppressMarkers:     true,
+            suppressInfoWindows: true,
+            polylineOptions: {
+              strokeColor:   SEGMENT_COLORS[i % SEGMENT_COLORS.length],
+              strokeOpacity: 0.88,
+              strokeWeight:  4,
+              geodesic:      true,
+            },
+          }}
+        />
+      ))}
+    </>
   )
 }
