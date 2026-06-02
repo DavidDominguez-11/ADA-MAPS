@@ -1,3 +1,4 @@
+import math
 import os
 import requests
 from typing import List
@@ -9,8 +10,12 @@ def get_api_key():
 
 DISTANCE_MATRIX_URL = "https://maps.googleapis.com/maps/api/distancematrix/json"
 
-# Google Distance Matrix API acepta máximo 25 orígenes x 25 destinos por request.
-# Para N locations, necesitamos N*N elementos → límite real: 25 locations por llamada.
+# El límite real de la API es 100 elementos por request (elementos = orígenes × destinos).
+# Para N locations enviando todo en un solo request: N² elementos.
+# Con N > 10, N² > 100 → MAX_ELEMENTS_EXCEEDED.
+# La solución es partir los orígenes en lotes de tamaño (100 // N),
+# usando siempre los N destinos completos, y hacer ceil(N / batch_size) requests.
+MAX_ELEMENTS_PER_REQUEST = 100
 MAX_LOCATIONS = 25
 
 
@@ -19,9 +24,43 @@ class DistanceMatrixError(Exception):
     pass
 
 
+def _fetch_rows(origins: List[str], destinations: List[str], api_key: str) -> List:
+    """Hace un request a la API y retorna data["rows"]. Lanza DistanceMatrixError si falla."""
+    try:
+        response = requests.get(
+            DISTANCE_MATRIX_URL,
+            params={
+                "origins":      "|".join(origins),
+                "destinations": "|".join(destinations),
+                "key":          api_key,
+                "units":        "metric",
+            },
+            timeout=10,
+        )
+        response.raise_for_status()
+    except requests.exceptions.Timeout:
+        raise DistanceMatrixError("Timeout al conectar con Google Distance Matrix API.")
+    except requests.exceptions.RequestException as e:
+        raise DistanceMatrixError(f"Error de red al llamar Google API: {e}")
+
+    data = response.json()
+
+    api_status = data.get("status")
+    if api_status != "OK":
+        raise DistanceMatrixError(
+            f"Google Distance Matrix API devolvió status: {api_status}. "
+            f"Verifica que la key tenga habilitada la Distance Matrix API."
+        )
+
+    return data["rows"]
+
+
 def build_distance_matrix(locations) -> List[List[int]]:
     """
     Construye una matriz NxN de distancias reales (en metros) entre todas las locations.
+
+    Parte los orígenes en lotes para respetar el límite de 100 elementos por request.
+    Hace ceil(N / batch_size) llamadas a la API y ensambla la matriz completa.
 
     Args:
         locations: Lista de objetos Location con atributos lat y lng.
@@ -48,57 +87,34 @@ def build_distance_matrix(locations) -> List[List[int]]:
 
     if n > MAX_LOCATIONS:
         raise DistanceMatrixError(
-            f"La API acepta máximo {MAX_LOCATIONS} locations por request. Se recibieron: {n}"
+            f"Máximo {MAX_LOCATIONS} locations permitidas. Se recibieron: {n}"
         )
 
     coordinates = [f"{loc.lat},{loc.lng}" for loc in locations]
-    locations_string = "|".join(coordinates)
 
-    try:
-        response = requests.get(
-            DISTANCE_MATRIX_URL,
-            params={
-                "origins": locations_string,
-                "destinations": locations_string,
-                "key": api_key,
-                "units": "metric",
-            },
-            timeout=10,
-        )
-        response.raise_for_status()
-    except requests.exceptions.Timeout:
-        raise DistanceMatrixError("Timeout al conectar con Google Distance Matrix API.")
-    except requests.exceptions.RequestException as e:
-        raise DistanceMatrixError(f"Error de red al llamar Google API: {e}")
+    # Cuántos orígenes podemos enviar por request sin superar 100 elementos
+    batch_size = max(1, MAX_ELEMENTS_PER_REQUEST // n)
+    num_batches = math.ceil(n / batch_size)
 
-    data = response.json()
+    matrix = [None] * n
 
-    print("DISTANCE MATRIX RESPONSE:", data)
+    for batch_idx in range(num_batches):
+        start = batch_idx * batch_size
+        end   = min(start + batch_size, n)
 
-    # Google puede responder 200 OK pero con error interno
-    api_status = data.get("status")
-    if api_status != "OK":
-        raise DistanceMatrixError(
-            f"Google Distance Matrix API devolvió status: {api_status}. "
-            f"Verifica que la key tenga habilitada la Distance Matrix API."
+        rows = _fetch_rows(
+            origins=coordinates[start:end],
+            destinations=coordinates,
+            api_key=api_key,
         )
 
-    matrix = []
-
-    for i, row in enumerate(data["rows"]):
-        matrix_row = []
-
-        for j, element in enumerate(row["elements"]):
-            element_status = element.get("status")
-
-            if element_status != "OK":
-                # Par de puntos sin ruta disponible (isla, etc.)
-                # Se usa -1 como indicador; el algoritmo genético lo manejará.
-                matrix_row.append(-1)
-            else:
-                distance = element["distance"]["value"]  # metros
-                matrix_row.append(distance)
-
-        matrix.append(matrix_row)
+        for local_i, row in enumerate(rows):
+            matrix_row = []
+            for element in row["elements"]:
+                if element.get("status") != "OK":
+                    matrix_row.append(-1)
+                else:
+                    matrix_row.append(element["distance"]["value"])
+            matrix[start + local_i] = matrix_row
 
     return matrix
